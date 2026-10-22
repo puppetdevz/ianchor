@@ -131,7 +131,7 @@ const fs = require('node:fs'), a = process.argv.slice(2), e = process.env;
 fs.appendFileSync(e.LOG, 'gh ' + a.join(' ') + '\\n');
 if (a[0] === 'api' && !a.includes('--include')) process.exit(Number(e.REPO_FAIL || 0));
 if (a[0] === 'api' && a.includes('--include')) {
-  if (e.QUERY_TIMEOUT) process.exit(1);
+  if (e.QUERY_TIMEOUT) { process.stderr.write(e.QUERY_ERROR || 'request timed out'); process.exit(1); }
   const status = Number(e.HTTP_STATUS || (fs.existsSync(e.RELEASE_STATE) ? 200 : 404));
   const body = e.BAD_RESPONSE ? 'not json' : JSON.stringify({tag_name:e.WRONG_RELEASE ? 'v0.0.0' : e.TAG});
   process.stdout.write('HTTP/2.0 ' + status + ' fixture\\r\\n\\r\\n' + body + '\\n');
@@ -237,6 +237,16 @@ describe('release workflow: real isolated Git index and mocked network', () => {
       const f = fixture(t, { old }); noPublish(f.run()); assert.equal(f.count(), 1);
     });
   }
+  for (const declaration of ['self.version "10.0.0"', 'desc "legacy"; version "10.0.0"', 'send(:version, "10.0.0")', 'method(:version).call("10.0.0")']) {
+    it(`rejects conflicting Ruby metadata outside line-based declarations: ${declaration}`, t => {
+      const old = legacy().replace('end\n', `  ${declaration}\nend\n`);
+      const f = fixture(t, { old }); noPublish(f.run()); assert.equal(f.count(), 1);
+    });
+  }
+  it('ignores version-like text in Ruby comments and heredocs without executing tap code', t => {
+    const f = fixture(t, { old: legacy().replace('end\n', '=begin\n  version "10.0.0"\n=end\n  def unused\n    <<~TEXT\n  version "10.0.0"\n    TEXT\n    raise "tap code must never execute"\n  end\nend\n') });
+    succeeded(f.run()); assert.equal(f.count(), 2);
+  });
   it('compares numeric version segments rather than lexicographically', t => {
     const f = fixture(t, { old: legacy('9.9.10') }); noPublish(f.run());
   });
@@ -250,6 +260,20 @@ describe('release workflow: real isolated Git index and mocked network', () => {
       fs.writeFileSync(p, mutation(fs.readFileSync(p, 'utf8'))); noPublish(f.run());
     });
   }
+  for (const declaration of [/  url [\s\S]*?  sha256 [^\n]+/, /  depends_on "node"/]) {
+    it(`rejects rendered declarations hidden inside a Ruby block comment: ${declaration}`, t => {
+      const f = fixture(t); const p = path.join(f.source, 'Formula/ianchor.rb');
+      const source = fs.readFileSync(p, 'utf8').replace(declaration, '=begin\n$&\n=end');
+      fs.writeFileSync(p, source); noPublish(f.run()); assert.equal(f.count(), 1);
+    });
+  }
+  for (const wrapper of ['if false', 'def deferred_dependency']) {
+    it(`rejects a Node dependency that is not an unconditional class declaration: ${wrapper}`, t => {
+      const f = fixture(t); const p = path.join(f.source, 'Formula/ianchor.rb');
+      fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace('  depends_on "node"', `  ${wrapper}\n  depends_on "node"\n  end`));
+      noPublish(f.run()); assert.equal(f.count(), 1);
+    });
+  }
   for (const fields of [{ DOWNLOAD_FAIL: '1' }, { SHA: '' }, { SHA: 'invalid' }, { SHA: 'a'.repeat(63) }]) {
     it(`fails download/checksum before publishing: ${JSON.stringify(fields)}`, t => {
       const r = fixture(t).run(fields); noPublish(r);
@@ -259,6 +283,18 @@ describe('release workflow: real isolated Git index and mocked network', () => {
   for (const fields of [{ REPO_FAIL: '1' }, { HTTP_STATUS: '401' }, { HTTP_STATUS: '403' }, { HTTP_STATUS: '429' }, { HTTP_STATUS: '500' }, { QUERY_TIMEOUT: '1' }, { HTTP_STATUS: '200', BAD_RESPONSE: '1' }, { HTTP_STATUS: '200', WRONG_RELEASE: '1' }]) {
     it(`does not mistake query error for missing Release: ${JSON.stringify(fields)}`, t => noPublish(fixture(t).run(fields)));
   }
+  for (const [error, category, guidance] of [
+    ['dial tcp: lookup api.github.com: no such host', 'DNS', /DNS|resolver/i],
+    ['x509: certificate signed by unknown authority', 'TLS', /certificate|TLS/i],
+    ['request timed out', 'network', /proxy|connectivity/i],
+  ]) it(`reports a safe Release query diagnosis and recovery guidance: ${category}`, t => {
+    const f = fixture(t);
+    const r = f.run({ QUERY_TIMEOUT: '1', QUERY_ERROR: `${error}; ${f.env.TAP_TOKEN}; ${f.env.SOURCE_TOKEN}` });
+    noPublish(r);
+    assert.match(r.stderr, new RegExp(`Release query.*${category}`, 'i'));
+    assert.match(r.stderr, guidance);
+    assert.match(r.stderr, /rerun the same tag/i);
+  });
   it('skips existing Release but still updates tap', t => {
     const f = fixture(t); fs.writeFileSync(f.env.RELEASE_STATE, 'v9.9.9');
     const r = f.run(); succeeded(r); assert.doesNotMatch(r.log, /gh release create/); assert.equal(f.count(), 2);

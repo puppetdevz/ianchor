@@ -51,6 +51,8 @@ brew install puppetdevz/puppetdevz/ianchor
 
 首次发布前，维护者需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-puppetdevz`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
 
+工作流用 Ruby 语法树读取元数据，不执行 tap 代码；只接受单个 `Ianchor < Formula` 类中的静态、无条件、直接 DSL 声明。动态/间接调用、条件元数据及不支持的类级结构会在发布前拒绝；维护者应核实实际版本后整理为静态声明再重跑，不要通过移除版本校验绕过。Release 查询失败只输出脱敏分类及修复指引，不回显原始错误。
+
 同一版本/内容重跑不重复创建 Release 或提交，模板修复可同版本同步，旧版本不得覆盖更高版本。Release 已创建而 tap 推送失败时保留 Release；修复权限/网络或远端竞争后可重跑同一标签。CI 使用当次 Homebrew Node 和锁文件验证，不保证未来所有 Node ABI 都有 SQLite 预编译产物，也不代表所有 Mac 架构都已实机验证。Formula 测试只在临时目录读写 SQLite，不执行真实 iCloud 初始化。
 
 ## 使用

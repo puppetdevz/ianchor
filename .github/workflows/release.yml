@@ -94,6 +94,66 @@ jobs:
           TARBALL_PATH="$WORK/source.tar.gz"
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
           CANDIDATE="$WORK/ianchor.rb"
+          RUBY_METADATA="$WORK/ruby-metadata.rb"
+          # Accept a static Formula DSL subset; never execute tap Ruby or infer dynamic values.
+          cat > "$RUBY_METADATA" <<'RUBY'
+          require 'ripper'
+          require 'json'
+          tree = Ripper.sexp(STDIN.read)
+          abort 'Invalid Formula syntax' unless tree
+          statements = tree[1].reject { |node| node[0] == :void_stmt }
+          klass = statements[0]
+          parent = klass && klass[0] == :class ? klass[2] : nil
+          unless statements.length == 1 && klass[0] == :class &&
+                 klass[1][0] == :const_ref && klass[1][1][1] == 'Ianchor' &&
+                 parent&.first == :var_ref && parent.dig(1, 0) == :@const && parent.dig(1, 1) == 'Formula'
+            abort 'Expected a single static Ianchor < Formula class'
+          end
+          body = klass[3]
+          abort 'Unsupported Formula class body' unless body[0] == :bodystmt && body.drop(2).all?(&:nil?)
+          fields = %w[version url sha256 depends_on]
+          declarations = Hash.new { |hash, key| hash[key] = [] }
+          literal_nodes = %i[args_add_block string_literal string_content symbol_literal symbol array hash assoclist_from_args bare_assoc_hash assoc_new]
+          literal = lambda do |node|
+            next true unless node.is_a?(Array)
+            next node.all? { |child| literal.call(child) } unless node[0].is_a?(Symbol)
+            next true if node[0].to_s.start_with?('@')
+            literal_nodes.include?(node[0]) && node.drop(1).all? { |child| literal.call(child) }
+          end
+          scan_deferred = lambda do |node|
+            next unless node.is_a?(Array)
+            if node[0] == :@ident && fields.include?(node[1])
+              abort 'Metadata must be an unconditional direct Formula class declaration'
+            end
+            node.each { |child| scan_deferred.call(child) if child.is_a?(Array) }
+          end
+          body[1].each do |node|
+            case node[0]
+            when :void_stmt
+              next
+            when :command
+              token, args = node[1], node[2]
+              unless (fields + %w[desc homepage license]).include?(token[1]) &&
+                     args[0] == :args_add_block && args[2] == false && literal.call(args)
+                abort 'Unsupported dynamic Formula declaration; use static literal DSL fields'
+              end
+              declarations[token[1]] << token[2] if fields.include?(token[1])
+            when :def
+              abort 'Cannot override Formula metadata methods' if fields.include?(node[1][1])
+              scan_deferred.call(node)
+            when :method_add_block
+              call = node[1]
+              unless call[0] == :method_add_arg && call[1][0] == :fcall &&
+                     call[1][1][1] == 'test' && call[2] == []
+                abort 'Unsupported Formula class-level block'
+              end
+              # Homebrew registers this block; it does not run while reading metadata.
+            else
+              abort 'Unsupported conditional or indirect Formula declaration'
+            end
+          end
+          puts JSON.generate(declarations)
+          RUBY
 
           # No credential in remote URL, command log or Git config. The helper contains no secret.
           printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$TAP_TOKEN" ;; esac' > "$WORK/askpass"
@@ -112,18 +172,22 @@ jobs:
           fi
 
           # Parse legacy metadata without evaluating arbitrary Ruby from the tap.
-          node --input-type=commonjs - "$TAP_PATH/Formula/ianchor.rb" "$VERSION" <<'NODE'
+          node --input-type=commonjs - "$TAP_PATH/Formula/ianchor.rb" "$VERSION" "$RUBY_METADATA" <<'NODE'
           const fs = require('node:fs');
           const assert = require('node:assert/strict');
-          const [file, target] = process.argv.slice(2);
+          const [file, target, parser] = process.argv.slice(2);
           if (!fs.existsSync(file)) process.exit(0);
           const source = fs.readFileSync(file, 'utf8');
-          const fields = key => {
-            const values = [...source.matchAll(new RegExp(`^[\\t ]*${key}[\\t ]+["']([^"']+)["'][\\t ]*(?:#[^\\r\\n]*)?\\r?$`, 'gm'))].map(x => x[1]);
-            const declarations = [...source.matchAll(new RegExp(`^[\\t ]*${key}\\b`, 'gm'))];
-            assert.equal(values.length, declarations.length, `Unsupported existing ${key} declaration`);
-            return values;
-          };
+          // Ruby syntax, not line starts, identifies declarations. Never evaluate tap code.
+          const { execFileSync } = require('node:child_process');
+          const declarations = JSON.parse(execFileSync('ruby', [parser], { input: source, encoding: 'utf8' }));
+          const lines = source.split(/\r?\n/);
+          const fields = key => (declarations[key] ?? []).map(([line, column]) => {
+            const text = lines[line - 1];
+            const value = text.match(new RegExp(`^[\\t ]*${key}[\\t ]+["']([^"']+)["'][\\t ]*(?:#[^\\r\\n]*)?$`));
+            assert.ok(value && !text.slice(0, column).trim(), `Unsupported existing ${key} declaration`);
+            return value[1];
+          });
           const versions = fields('version'), urls = fields('url'), shas = fields('sha256');
           assert.equal(urls.length, 1, 'Existing Formula must have exactly one source URL');
           assert.equal(shas.length, 1, 'Existing Formula must have exactly one checksum');
@@ -143,10 +207,11 @@ jobs:
           curl --fail --location --retry 3 --output "$TARBALL_PATH" "$TARBALL_URL"
           SHA256=$(shasum -a 256 "$TARBALL_PATH" | awk '{print $1}')
           echo "Source archive sha256: $SHA256"
-          node --input-type=commonjs - "$TEMPLATE" "$CANDIDATE" "$VERSION" "$TARBALL_URL" "$SHA256" <<'NODE'
+          node --input-type=commonjs - "$TEMPLATE" "$CANDIDATE" "$VERSION" "$TARBALL_URL" "$SHA256" "$RUBY_METADATA" <<'NODE'
           const fs = require('node:fs');
           const assert = require('node:assert/strict');
-          const [template, out, version, url, sha] = process.argv.slice(2);
+          const { execFileSync } = require('node:child_process');
+          const [template, out, version, url, sha, parser] = process.argv.slice(2);
           assert.match(sha, /^[a-fA-F0-9]{64}$/, 'Invalid archive SHA256');
           let source = fs.readFileSync(template, 'utf8');
           for (const [key, value] of Object.entries({ VERSION: version, URL: url, SHA256: sha })) {
@@ -155,14 +220,15 @@ jobs:
             source = source.replace(marker, value);
           }
           assert.doesNotMatch(source, /__IANCHOR_/, 'Unresolved template field');
-          for (const [key, value] of Object.entries({ version, url, sha256: sha })) {
-            assert.equal([...source.matchAll(new RegExp(`^[\\t ]*${key}\\b`, 'gm'))].length, 1, `Ambiguous rendered ${key}`);
-            const values = [...source.matchAll(new RegExp(`^\\s*${key}\\s+"([^"]+)"\\s*$`, 'gm'))];
-            assert.equal(values.length, 1, `Expected one rendered ${key}`);
-            assert.equal(values[0][1], value, `Incorrect rendered ${key}`);
+          const declarations = JSON.parse(execFileSync('ruby', [parser], { input: source, encoding: 'utf8' }));
+          const lines = source.split(/\r?\n/);
+          for (const [key, expected] of Object.entries({ version, url, sha256: sha, depends_on: 'node' })) {
+            assert.equal(declarations[key]?.length, 1, `Expected exactly one real rendered ${key} declaration`);
+            const [line, column] = declarations[key][0], text = lines[line - 1];
+            const value = text.match(new RegExp(`^[\\t ]*${key}[\\t ]+"([^"]+)"[\\t ]*(?:#[^\\r\\n]*)?$`));
+            assert.ok(value && !text.slice(0, column).trim(), `Unsupported rendered ${key} declaration`);
+            assert.equal(value[1], expected, `Incorrect rendered ${key}`);
           }
-          assert.equal([...source.matchAll(/^[\t ]*depends_on\b/gm)].length, 1, 'Expected exactly one dependency declaration');
-          assert.deepEqual([...source.matchAll(/^\s*depends_on (.+)$/gm)].map(x => x[1]), ['"node"'], 'Only node may be a direct dependency');
           fs.writeFileSync(out, source);
           NODE
           ruby -c "$CANDIDATE"
@@ -187,7 +253,28 @@ jobs:
           elif [ "$QUERY_STATUS" -ne 0 ] && [ "$HTTP_STATUS" = 404 ]; then
             GH_TOKEN="$SOURCE_TOKEN" gh release create "$TAG" --repo "$REPO" --verify-tag --title "$TAG" --notes "Release $TAG"
           else
-            echo "::error::Release query failed (exit=$QUERY_STATUS, HTTP=${HTTP_STATUS:-unknown}); refusing to infer absence" >&2
+            # Classify untrusted stderr without ever printing it (it may contain credentials).
+            node --input-type=commonjs - "$WORK/query-error" "$QUERY_STATUS" "${HTTP_STATUS:-unknown}" <<'NODE'
+          const fs = require('node:fs');
+          const [file, exit, rawStatus] = process.argv.slice(2);
+          const status = /^\d{3}$/.test(rawStatus) ? rawStatus : 'unknown';
+          const error = fs.readFileSync(file, 'utf8');
+          let category = 'API/network', guidance = 'Check GitHub API availability, credentials and proxy connectivity';
+          if (status === '401' || status === '403') {
+            category = 'authentication/permission'; guidance = 'Check SOURCE_TOKEN contents permissions and repository access';
+          } else if (status === '429') {
+            category = 'rate limit'; guidance = 'Wait for the GitHub API rate limit to reset';
+          } else if (/^5\d\d$/.test(status)) {
+            category = 'GitHub service'; guidance = 'Check GitHub API service status';
+          } else if (/no such host|ENOTFOUND|name resolution|resolve host/i.test(error)) {
+            category = 'DNS'; guidance = 'Check the DNS resolver and api.github.com connectivity';
+          } else if (/TLS|SSL|x509|certificate/i.test(error)) {
+            category = 'TLS'; guidance = 'Check TLS certificates and HTTPS proxy configuration';
+          } else if (/timed? ?out|timeout|ECONN|connection|proxy/i.test(error)) {
+            category = 'network'; guidance = 'Check network and proxy connectivity';
+          }
+          console.error(`::error::Release query failed (${category}; exit=${exit}, HTTP=${status}). ${guidance}; rerun the same tag after resolving. Refusing to infer absence; existing Releases are preserved.`);
+          NODE
             exit 1
           fi
 

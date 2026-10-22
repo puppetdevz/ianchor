@@ -353,7 +353,7 @@ iAnchor 是使用 Node.js、ES modules 和 `better-sqlite3` 的 macOS CLI。用�
 - 保留工作区原有 `node_modules`；另建临时应用副本，实际执行工作流的锁定依赖安装步骤，使用更新后的锁文件获取 `better-sqlite3 12.10.0`。
 - SQLite 预编译 tarball 实际返回 HTTP 200，实际加载原生模块、内存建表/写入/读回，以及 `lib/db.js` 的临时 WAL 数据库探针均成功。
 - 再将预编译下载代理指向不可连接的本地端口：实际下载阶段非零退出，给出 Node/ABI/架构诊断；Python、node-gyp 和编译器拦截日志调用数为 0。
-- 在该锁文件隔离环境执行项目 `npm test`：**120 项通过，失败/取消/跳过均为 0**。另用 Ruby/Psych 检查 YAML，用 `bash -n` 检查全部 4 个工作流 shell 步骤，Ruby 语法、测试 JS 语法、Git whitespace 检查均通过。
+- 在该锁文件隔离环境执行项目 `npm test`：**132 项通过，失败/取消/跳过均为 0**（含第 10.5 节提交后复审新增的 12 项）。另用 Ruby/Psych 检查 YAML，用 `bash -n` 检查全部 4 个工作流 shell 步骤，Ruby 语法、测试 JS 语法、Git whitespace 检查均通过。
 - 发布测试使用真实临时 Git 仓库/index/bare remote；GitHub API、源码归档下载及凭据为 fixture，不触达真实 tap。正常 fixture 的 SHA256 由真实 `shasum -a 256` 对下载文件计算。
 - Formula DSL 安装/测试 harness 模拟 Homebrew 路径 API、npm 安装与下载，但执行真实应用、真实 SQLite 和入口脚本；包含带空格的安装目录、PATH 中另一 Node、`1.0.0`/`2.3.4` 两种包版本。它不是实际 `brew install` 的替代证据。
 
@@ -361,10 +361,10 @@ iAnchor 是使用 Node.js、ES modules 和 `better-sqlite3` 的 macOS CLI。用�
 
 | 编号 | 已检查的证据 |
 | --- | --- |
-| AUTO-01 | 实际 Homebrew Node 下锁定安装与 120 项完整回归；仅授权 SQLite 包变化，其他锁文件项一致。 |
+| AUTO-01 | 实际 Homebrew Node 下锁定安装与 132 项完整回归；仅授权 SQLite 包变化，其他锁文件项一致。 |
 | AUTO-02 | 三个唯一占位符、唯一 node 直接依赖；模板和渲染产物均通过 Ruby 语法检查。 |
 | AUTO-03 | 下载 fixture 文件的真实 SHA256、URL、版本与渲染结果完全一致，无占位符残留。 |
-| AUTO-04 | 缺字段、重复字段、未知/未闭合占位符、重复版本与额外依赖声明均在创建 Release 前失败。 |
+| AUTO-04 | 缺字段、重复字段、未知/未闭合占位符、重复版本、额外依赖及注释/条件/方法体中的假声明均在创建 Release 前失败。 |
 | AUTO-05 | 缺目标文件时真实暂存、提交、推送各一次，提交路径只有目标 Formula。 |
 | AUTO-06 | 缺整个 Formula 目录时同样成功首发。 |
 | AUTO-07 | 旧模板整体替换；其他 Formula、README、根目录文件按字节比较不变。 |
@@ -372,10 +372,10 @@ iAnchor 是使用 Node.js、ES modules 和 `better-sqlite3` 的 macOS CLI。用�
 | AUTO-09 | 同版本模板修复提交一次，不重建已有 Release。 |
 | AUTO-10 | 非稳定标签、前导零、版本不一致及 shell 注入标签被拒绝，无副作用。 |
 | AUTO-11 | 单提交、无历史标签/Release 的 fixture 完成首次发布，不查询上一版本。 |
-| AUTO-12 | BigInt 数字段比较拒绝降级；损坏/冲突、尾随注释版本覆盖、不可解析声明均保守拒绝。旧 Formula 只接受严格可识别的稳定版 URL 元数据，可含标准尾随注释，不执行其中 Ruby。 |
+| AUTO-12 | BigInt 数字段比较拒绝降级；损坏/冲突、尾随注释版本覆盖、显式 receiver、同一行附加及反射调用均保守拒绝。元数据只接受单个 Formula 类体的无条件、直接、静态字面量 DSL；标准尾随注释可接受，注释和 heredoc 内的假版本不参与判断，不执行 tap Ruby。 |
 | AUTO-13 | 缺 token、clone 失败、缺 main、路径为符号链接/错误类型均失败，日志中无 fixture token。只读检查不能证明远端写权限。 |
 | AUTO-14 | 下载失败不计算 SHA、不发布；空值/非法 SHA 被拒绝；全部临时发布目录清理。 |
-| AUTO-15 | 明确 Release 404 才创建；仓库查询失败、401/403/429/500、超时、坏 JSON/错误 tag 均不误创建。 |
+| AUTO-15 | 明确 Release 404 才创建；仓库查询失败、401/403/429/500、超时、坏 JSON/错误 tag 均不误创建。DNS/TLS/连接错误给出固定脱敏诊断和重跑指引，不回显含凭据的原始 stderr。 |
 | AUTO-16 | Release 成功后模拟 push 失败，以及真实 bare remote hook 拒绝 push；保留 Release，重跑只补 tap。 |
 | AUTO-17 | 固定并发组、不取消运行中任务；真实竞争提交导致失败，候选无差异也检查基准，不 force push。 |
 | AUTO-18 | CI 直接复用 Formula 预编译脚本；下载/加载故障非零且编译命令调用为 0；额外执行真实下载连接失败检查。 |
@@ -387,3 +387,11 @@ iAnchor 是使用 Node.js、ES modules 和 `better-sqlite3` 的 macOS CLI。用�
 独立只读审查发现两项问题：测试固定 `1.0.0` 会阻止下一版发布，以及带尾随注释的旧版本声明可能被忽略。两项均已先添加失败复现测试再修复，并纳入上述完整回归。
 
 真实 GitHub/tap 权限、实际稳定标签发布、单台 Mac 的真实 Homebrew 安装/升级、`brew test` 与 Actions 重跑仍属于第 6.3 节用户手动验收，**尚未执行，不宣称已通过**。双架构兼容性没有实机验收结论。实现与自动验收已交付，手动步骤及权限前提已在第 6.3 节给出，供用户后续执行。
+
+### 10.5 提交后对抗性复审与修复
+
+针对实现提交 `f2c90b2` 的复审确认三类问题：行正则会漏掉 `self.version`、同一行附加声明及 `method(:version).call` 等间接调用，导致降级保护失效；Ruby 注释中的假声明或条件/方法体中的不生效声明仍能通过候选验证；Release 查询失败时丢弃 stderr，缺少网络故障诊断与修复方向。
+
+修复遵循“语法存在不等于语义生效”：旧 Formula 和渲染产物共用 Ripper 解析器，只在一个 `Ianchor < Formula` 类体的白名单静态 DSL 子集内采信直接、无条件元数据，按 AST 的真实位置验证唯一字面量值。不执行 tap Ruby，也不尝试解释任意动态 Ruby；超出支持范围时明确失败，由维护者核实版本并整理静态声明，不能猜测低版本继续发布。Release 查询错误则只做固定分类和修复提示，原始 stderr 和凭据不输出。
+
+新增 12 项回归覆盖 receiver/同一行/反射调用、注释与 heredoc、注释中的假元数据/依赖、条件/方法体依赖以及 DNS/TLS/网络错误。缺陷用例在原提交中可复现错误发布；修复后完整 132 项通过。完整回归在临时锁文件安装副本中执行工作流原始安装与测试步骤，Homebrew Node `v26.12.0`/ABI `147`/`darwin-arm64` 下真实下载 `better-sqlite3 12.10.0` 预编译包并加载/读写成功。工作区原有依赖、项目版本及 changelog 均未更改；未执行真实远端写入或用户手动验收。
