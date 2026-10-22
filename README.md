@@ -19,6 +19,8 @@ brew install puppetdevz/puppetdevz/ianchor
 
 此个人 tap 对应仓库 [puppetdevz/homebrew-puppetdevz](https://github.com/puppetdevz/homebrew-puppetdevz)。
 
+Formula 仅声明 `node` 为直接依赖，入口绑定 Homebrew Node，不受 nvm 等 PATH 配置影响。`better-sqlite3` 必须有匹配该 Node ABI、macOS 和架构的预编译包；下载或加载失败会中止安装，不回退源码编译，也不要求额外声明 Python。Node 自身仍可能有传递依赖，安装需要联网。Homebrew Node 跨 ABI 升级后，旧原生模块可能失效，可重新安装以获取匹配产物；没有产物时请报告错误，不要尝试源码编译。
+
 ## 升级
 
 已从新 tap 安装的用户：
@@ -42,6 +44,14 @@ brew install puppetdevz/puppetdevz/ianchor
 若使用的旧 tap 是 `puppetdevz/ianchor`，将上面的 untap 命令替换为 `brew untap puppetdevz/ianchor`；只移除实际使用的旧 tap。
 
 迁移只更换 Homebrew 安装来源，命令仍为 `ianchor`，安装仍位于 `$(brew --prefix)/Cellar/ianchor/<版本>`。卸载程序不会删除 iCloud 同步目录、追踪数据库或 `~/.config/ianchor.json`，无需先执行 `recover` 或重新初始化。
+
+## 发布维护
+
+源码仓库的 `Formula/ianchor.rb` 是带占位符的权威模板，不能直接安装。稳定版 `vMAJOR.MINOR.PATCH` 标签必须与 `package.json` 版本一致；Actions 使用该标签提交中的模板和源码归档 SHA256，将完整 Formula 同步到 tap 的 `main`，不在 tap 单独维护安装逻辑。预发布标签会被拒绝。
+
+首次发布前，维护者需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-puppetdevz`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
+
+同一版本/内容重跑不重复创建 Release 或提交，模板修复可同版本同步，旧版本不得覆盖更高版本。Release 已创建而 tap 推送失败时保留 Release；修复权限/网络或远端竞争后可重跑同一标签。CI 使用当次 Homebrew Node 和锁文件验证，不保证未来所有 Node ABI 都有 SQLite 预编译产物，也不代表所有 Mac 架构都已实机验证。Formula 测试只在临时目录读写 SQLite，不执行真实 iCloud 初始化。
 
 ## 使用
 

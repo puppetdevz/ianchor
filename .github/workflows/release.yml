@@ -8,66 +8,209 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: homebrew-puppetdevz-ianchor
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: npm install
+      - name: Use Homebrew Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE_PREFIX=$(brew --prefix node)
+          if [ ! -x "$NODE_PREFIX/bin/node" ]; then
+            brew install node
+            NODE_PREFIX=$(brew --prefix node)
+          fi
+          test -x "$NODE_PREFIX/bin/node"
+          test -f "$NODE_PREFIX/libexec/bin/npm"
+          echo "$NODE_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "$NODE_PREFIX/libexec/bin" >> "$GITHUB_PATH"
+          echo "HOMEBREW_NODE_PREFIX=$NODE_PREFIX" >> "$GITHUB_ENV"
+          brew list --versions node
+          sw_vers
+          "$NODE_PREFIX/bin/node" -p 'JSON.stringify({node:process.version,abi:process.versions.modules,platform:process.platform,arch:process.arch,executable:process.execPath})'
+
+      - name: Install precompiled dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          node "$HOMEBREW_NODE_PREFIX/libexec/bin/npm" ci --ignore-scripts --engine-strict --no-audit --no-fund
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const os = require('node:os');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const template = fs.readFileSync('Formula/ianchor.rb', 'utf8');
+          function method(name) {
+            const match = template.match(new RegExp(`  def ${name}\\n    <<~'JS'\\n([\\s\\S]*?)\\n    JS\\n  end`));
+            if (!match) throw new Error(`Missing Formula method: ${name}`);
+            return match[1].replace(/^      /gm, '');
+          }
+          // Execute the exact same prebuild-only implementation used by Formula.install.
+          execFileSync(process.execPath, ['--input-type=commonjs', '-e', method('prebuild_script')], { stdio: 'inherit' });
+          const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ianchor-ci-sqlite-'));
+          try {
+            execFileSync(process.execPath, ['--input-type=module', '-e', method('sqlite_probe'), path.resolve('lib/db.js'), dir], { stdio: 'inherit' });
+          } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+          }
+          NODE
 
       - name: Run tests
-        run: npm test
+        run: |
+          npm test
 
-      - name: Create GitHub release
+      - name: Publish release and formula
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          SOURCE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         shell: bash
         run: |
-          TAG="${{ github.ref_name }}"
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            echo "Release $TAG already exists; skipping creation."
-          else
-            gh release create "$TAG" --title "$TAG" --notes "Release $TAG"
-          fi
-
-      - name: Update Homebrew formula
-        env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        shell: bash
-        run: |
-          TAG="${{ github.ref_name }}"
+          set -euo pipefail
+          set +x
+          : "${TAG:?Missing tag}" "${SOURCE_TOKEN:?Missing source token}" "${TAP_TOKEN:?Missing HOMEBREW_TAP_TOKEN}"
           REPO="puppetdevz/ianchor"
+          TEMPLATE="$PWD/Formula/ianchor.rb"
+          VERSION=$(node --input-type=commonjs <<'NODE'
+          const assert = require('node:assert/strict');
+          const tag = process.env.TAG;
+          assert.match(tag, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, 'Only stable vMAJOR.MINOR.PATCH tags are supported');
+          assert.equal(require('./package.json').version, tag.slice(1), 'Tag/package version mismatch');
+          console.log(tag.slice(1));
+          NODE
+          )
+          WORK=$(mktemp -d)
+          trap 'rm -rf "$WORK"' EXIT
+          TAP_PATH="$WORK/tap"
+          TARBALL_PATH="$WORK/source.tar.gz"
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
+          CANDIDATE="$WORK/ianchor.rb"
 
-          TARBALL_PATH=$(mktemp)
-          TAP_PATH=$(mktemp -d)
-          trap 'rm -f "$TARBALL_PATH"; rm -rf "$TAP_PATH"' EXIT
-          curl --fail --location --retry 3 --output "$TARBALL_PATH" "$TARBALL_URL"
-          SHA256=$(shasum -a 256 "$TARBALL_PATH" | awk '{print $1}')
-          echo "sha256: ${SHA256}"
-
-          git clone https://x-access-token:${GH_TOKEN}@github.com/puppetdevz/homebrew-puppetdevz.git "$TAP_PATH"
-          cd "$TAP_PATH"
-
-          if [ ! -f Formula/ianchor.rb ]; then
-            echo "::error::Missing Formula/ianchor.rb in puppetdevz/homebrew-puppetdevz; initialize the formula before releasing." >&2
+          # No credential in remote URL, command log or Git config. The helper contains no secret.
+          printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" "x-access-token" ;; *) printf "%s\n" "$TAP_TOKEN" ;; esac' > "$WORK/askpass"
+          chmod 700 "$WORK/askpass"
+          export GIT_ASKPASS="$WORK/askpass" GIT_TERMINAL_PROMPT=0
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
+          git clone --branch main --single-branch https://github.com/puppetdevz/homebrew-puppetdevz.git "$TAP_PATH"
+          BASE=$(git -C "$TAP_PATH" rev-parse HEAD)
+          if [ -L "$TAP_PATH/Formula" ] || [ -L "$TAP_PATH/Formula/ianchor.rb" ]; then
+            echo "::error::Formula paths must not be symbolic links" >&2
+            exit 1
+          fi
+          if { [ -e "$TAP_PATH/Formula" ] && [ ! -d "$TAP_PATH/Formula" ]; } || { [ -e "$TAP_PATH/Formula/ianchor.rb" ] && [ ! -f "$TAP_PATH/Formula/ianchor.rb" ]; }; then
+            echo "::error::Invalid Formula path type" >&2
             exit 1
           fi
 
-          sed -i.bak "s|url \".*\"|url \"${TARBALL_URL}\"|" Formula/ianchor.rb
-          sed -i.bak "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/ianchor.rb
-          rm -f Formula/ianchor.rb.bak
+          # Parse legacy metadata without evaluating arbitrary Ruby from the tap.
+          node --input-type=commonjs - "$TAP_PATH/Formula/ianchor.rb" "$VERSION" <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const [file, target] = process.argv.slice(2);
+          if (!fs.existsSync(file)) process.exit(0);
+          const source = fs.readFileSync(file, 'utf8');
+          const fields = key => {
+            const values = [...source.matchAll(new RegExp(`^[\\t ]*${key}[\\t ]+["']([^"']+)["'][\\t ]*(?:#[^\\r\\n]*)?\\r?$`, 'gm'))].map(x => x[1]);
+            const declarations = [...source.matchAll(new RegExp(`^[\\t ]*${key}\\b`, 'gm'))];
+            assert.equal(values.length, declarations.length, `Unsupported existing ${key} declaration`);
+            return values;
+          };
+          const versions = fields('version'), urls = fields('url'), shas = fields('sha256');
+          assert.equal(urls.length, 1, 'Existing Formula must have exactly one source URL');
+          assert.equal(shas.length, 1, 'Existing Formula must have exactly one checksum');
+          assert.match(shas[0], /^[a-fA-F0-9]{64}$/, 'Invalid existing checksum');
+          assert.ok(versions.length <= 1, 'Ambiguous existing version');
+          const urlVersion = urls[0].match(/^https:\/\/github\.com\/puppetdevz\/ianchor\/archive\/(?:refs\/tags\/)?v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))\.tar\.gz$/)?.[1];
+          assert.ok(urlVersion, 'Cannot identify existing stable version');
+          const old = versions[0] ?? urlVersion;
+          assert.equal(old, urlVersion, 'Conflicting existing version and URL');
+          const a = target.split('.').map(BigInt), b = old.split('.').map(BigInt);
+          for (let i = 0; i < 3; i++) {
+            if (a[i] > b[i]) break;
+            assert.ok(a[i] >= b[i], `Refusing downgrade from ${old} to ${target}`);
+          }
+          NODE
+          if [ -f "$TAP_PATH/Formula/ianchor.rb" ]; then ruby -c "$TAP_PATH/Formula/ianchor.rb"; fi
+          curl --fail --location --retry 3 --output "$TARBALL_PATH" "$TARBALL_URL"
+          SHA256=$(shasum -a 256 "$TARBALL_PATH" | awk '{print $1}')
+          echo "Source archive sha256: $SHA256"
+          node --input-type=commonjs - "$TEMPLATE" "$CANDIDATE" "$VERSION" "$TARBALL_URL" "$SHA256" <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const [template, out, version, url, sha] = process.argv.slice(2);
+          assert.match(sha, /^[a-fA-F0-9]{64}$/, 'Invalid archive SHA256');
+          let source = fs.readFileSync(template, 'utf8');
+          for (const [key, value] of Object.entries({ VERSION: version, URL: url, SHA256: sha })) {
+            const marker = `__IANCHOR_${key}__`;
+            assert.equal(source.split(marker).length - 1, 1, `Expected one ${marker}`);
+            source = source.replace(marker, value);
+          }
+          assert.doesNotMatch(source, /__IANCHOR_/, 'Unresolved template field');
+          for (const [key, value] of Object.entries({ version, url, sha256: sha })) {
+            assert.equal([...source.matchAll(new RegExp(`^[\\t ]*${key}\\b`, 'gm'))].length, 1, `Ambiguous rendered ${key}`);
+            const values = [...source.matchAll(new RegExp(`^\\s*${key}\\s+"([^"]+)"\\s*$`, 'gm'))];
+            assert.equal(values.length, 1, `Expected one rendered ${key}`);
+            assert.equal(values[0][1], value, `Incorrect rendered ${key}`);
+          }
+          assert.equal([...source.matchAll(/^[\t ]*depends_on\b/gm)].length, 1, 'Expected exactly one dependency declaration');
+          assert.deepEqual([...source.matchAll(/^\s*depends_on (.+)$/gm)].map(x => x[1]), ['"node"'], 'Only node may be a direct dependency');
+          fs.writeFileSync(out, source);
+          NODE
+          ruby -c "$CANDIDATE"
 
-          if [ -n "$(git diff --name-only Formula/ianchor.rb)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add Formula/ianchor.rb
-            git commit -m "chore: update formula for ${TAG}"
-            git push origin main
+          # An API failure is not evidence of absence. First prove repository access.
+          GH_TOKEN="$SOURCE_TOKEN" gh api "repos/$REPO" --silent
+          set +e
+          GH_TOKEN="$SOURCE_TOKEN" gh api --include "repos/$REPO/releases/tags/$TAG" > "$WORK/response" 2> "$WORK/query-error"
+          QUERY_STATUS=$?
+          set -e
+          HTTP_STATUS=$(awk 'NR == 1 {print $2}' "$WORK/response")
+          if [ "$QUERY_STATUS" -eq 0 ] && [ "$HTTP_STATUS" = 200 ]; then
+            node --input-type=commonjs - "$WORK/response" "$TAG" <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const [file, tag] = process.argv.slice(2);
+          const response = fs.readFileSync(file, 'utf8');
+          const body = response.split(/\r?\n\r?\n/).slice(1).join('\n\n');
+          assert.equal(JSON.parse(body).tag_name, tag, 'Unexpected Release response');
+          NODE
+            echo "Release $TAG already exists; skipping creation."
+          elif [ "$QUERY_STATUS" -ne 0 ] && [ "$HTTP_STATUS" = 404 ]; then
+            GH_TOKEN="$SOURCE_TOKEN" gh release create "$TAG" --repo "$REPO" --verify-tag --title "$TAG" --notes "Release $TAG"
+          else
+            echo "::error::Release query failed (exit=$QUERY_STATUS, HTTP=${HTTP_STATUS:-unknown}); refusing to infer absence" >&2
+            exit 1
           fi
+
+          cd "$TAP_PATH"
+          REMOTE_BASE=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          if [ "$REMOTE_BASE" != "$BASE" ]; then
+            echo "::error::Tap main changed during preparation; rerun after checking the newer version" >&2
+            exit 1
+          fi
+          mkdir -p Formula
+          cp "$CANDIDATE" Formula/ianchor.rb
+          git add -- Formula/ianchor.rb
+          set +e
+          git diff --cached --quiet -- Formula/ianchor.rb
+          DIFF_STATUS=$?
+          set -e
+          case "$DIFF_STATUS" in
+            0) echo "Formula is unchanged; no commit or push required." ;;
+            1)
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git commit -m "chore: update formula for ${TAG}" -- Formula/ianchor.rb
+              git push origin HEAD:main
+              ;;
+            *) echo "::error::Cannot inspect staged Formula diff (exit=$DIFF_STATUS)" >&2; exit "$DIFF_STATUS" ;;
+          esac

@@ -19,6 +19,8 @@ brew install puppetdevz/puppetdevz/ianchor
 
 This personal tap is hosted at [puppetdevz/homebrew-puppetdevz](https://github.com/puppetdevz/homebrew-puppetdevz).
 
+The Formula declares only `node` as a direct dependency and binds the launcher to Homebrew Node, independent of nvm or other PATH settings. `better-sqlite3` requires a prebuilt binary matching that Node ABI, macOS and architecture. Download/load failures stop installation: there is no source-compilation fallback or extra Python declaration. Node may still have transitive dependencies, and installation requires network access. A Homebrew Node ABI upgrade can invalidate an already-installed native module; reinstall to fetch a matching prebuild. If none exists, report the error rather than compiling from source.
+
 ## Upgrade
 
 For installations already using the new tap:
@@ -42,6 +44,14 @@ brew install puppetdevz/puppetdevz/ianchor
 If your old tap was `puppetdevz/ianchor`, replace the untap command above with `brew untap puppetdevz/ianchor`; remove only the old tap you actually used.
 
 Migration only changes the Homebrew installation source. The command remains `ianchor`, installed under `$(brew --prefix)/Cellar/ianchor/<version>`. Uninstalling the program does not delete the iCloud sync directory, tracking database, or `~/.config/ianchor.json`. There is no need to run `recover` or initialize again.
+
+## Release maintenance
+
+The source repository's `Formula/ianchor.rb` is the authoritative placeholder template, not a directly installable Formula. A stable `vMAJOR.MINOR.PATCH` tag must match `package.json`. Actions renders the template from that tagged commit with the source archive SHA256 and syncs the complete Formula to the tap's `main`. Keep installation changes in the source template, not in tap-only edits. Prerelease tags are rejected.
+
+Before the first release, prepare an existing `puppetdevz/homebrew-puppetdevz` repository with at least one commit on `main`, and configure `HOMEBREW_TAP_TOKEN` in the source repository with permission to push directly to that branch. Missing `Formula/` directories or the target Formula are created automatically; the workflow does not create repositories or change branch protection. Maintainers must explicitly invoke the release process; do not move old tags to adopt a new workflow.
+
+Identical reruns create no duplicate Release or commit. Template fixes can sync at the same version; older versions cannot overwrite newer ones. If tap push fails after Release creation, the Release is retained: fix permissions/network or resolve concurrent changes, then rerun the same tag. CI validates the lockfile with that run's Homebrew Node, not every future ABI or Mac architecture. Formula tests exercise SQLite only in temporary directories and never initialize real iCloud data.
 
 ## Usage
 
