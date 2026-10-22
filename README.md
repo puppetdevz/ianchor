@@ -115,12 +115,37 @@ ianchor remove -y zshrc  # 跳过确认
 
 ## Shell 补全
 
-可生成 zsh 或 bash 补全脚本，支持补全已追踪的条目名：
+支持补全子命令、选项、`add` 的本地路径，以及 `recover/relink/remove` 的已追踪条目名。**输入 `ianchor`（末尾有空格）再按 Tab 才是补子命令；没有空格时补的是可执行文件名。**
+
+### Homebrew 安装
+
+Formula 会安装 zsh 和 bash 补全文件。zsh 需要在运行 `compinit` **之前**包含 Homebrew 补全目录：
+
+```zsh
+fpath=("$(brew --prefix)/share/zsh/site-functions" $fpath)
+autoload -Uz compinit
+compinit
+```
+
+如果使用 Oh My Zsh 等会自动运行 `compinit` 的框架，只需将 `fpath` 那行放在框架初始化之前，不要重复初始化。bash 需要启用 Homebrew 的 bash-completion，或使用下面的手动加载方式。
+
+### 手动加载
+
+`ianchor completion zsh/bash` 只输出脚本，不会启用补全。当前 zsh 会话可在 `compinit` 之后运行：
+
+```zsh
+source <(ianchor completion zsh)
+```
+
+bash 会话使用：
 
 ```bash
-ianchor completion zsh
-ianchor completion bash
+source <(ianchor completion bash)
 ```
+
+需要持久生效时，将对应的 `source` 行放入 shell 启动文件（zsh 的 `~/.zshrc`，bash 的 `~/.bashrc`；登录 bash 还需从 `~/.bash_profile` 加载 `~/.bashrc`）。也可以把 zsh 脚本保存为某个 `$fpath` 目录中的 `_ianchor`，随后重新运行 `compinit`，无需再手动 source。
+
+升级后仍出现 `_ianchor: function definition file not found` 时，先检查 `$fpath` 中的 `_ianchor` 是否存在；补全文件就位后再删除旧 `~/.zcompdump*` 缓存并重开终端。
 
 ## License
 

@@ -61,6 +61,9 @@ describe('Formula prebuilt-only installation', () => {
     assert.match(s, /libexec.install "bin", "lib", "package.json", "package-lock.json", "node_modules"/);
     assert.doesNotMatch(s, /ianchor init|Mobile Documents|\.config\/ianchor/);
   });
+  it('installs zsh and bash completions using the installed launcher', () => {
+    assert.match(formula(), /generate_completions_from_executable\(bin\/"ianchor", "completion", shells: \[:zsh, :bash\]\)/);
+  });
   it('is valid Ruby before and after rendering', () => {
     for (const s of [formula(), formula().replace('__IANCHOR_VERSION__', '9.9.9').replace('__IANCHOR_URL__', 'https://example.invalid/v9.9.9.tar.gz').replace('__IANCHOR_SHA256__', 'a'.repeat(64))]) {
       const r = spawnSync('ruby', ['-c'], { input: s, encoding: 'utf8' });
@@ -149,6 +152,16 @@ class Formula
   def version = ENV.fetch("PACKAGE_VERSION")
   def libexec = Pathname(ENV.fetch("PREFIX"))/"libexec"
   def bin = Pathname(ENV.fetch("PREFIX"))/"bin"
+  def generate_completions_from_executable(executable, command, shells:)
+    raise "must generate through installed launcher" unless executable == bin/"ianchor"
+    shells.each do |shell|
+      destination = Pathname(ENV.fetch("PREFIX"))/"share"/(shell == :zsh ? "zsh/site-functions/_ianchor" : "bash-completion/completions/ianchor")
+      FileUtils.mkdir_p(destination.dirname)
+      output = IO.popen([executable.to_s, command, shell.to_s], &:read)
+      raise "completion generation failed" unless $?.success?
+      destination.write(output)
+    end
+  end
   def buildpath = Pathname.pwd
   def testpath = Pathname(ENV.fetch("PREFIX"))/"test"
   def ohai(*) = nil
@@ -189,6 +202,8 @@ f.instance_eval(&Ianchor.test_block)
       assert.equal(r.status, 0, r.stdout + r.stderr);
       assert.ok(fs.existsSync(path.join(prefix, 'test/sqlite-check/ianchor.db')));
       assert.ok(fs.existsSync(path.join(prefix, 'libexec/package.json')));
+      assert.match(fs.readFileSync(path.join(prefix, 'share/zsh/site-functions/_ianchor'), 'utf8'), /^#compdef ianchor/);
+      assert.match(fs.readFileSync(path.join(prefix, 'share/bash-completion/completions/ianchor'), 'utf8'), /complete .*ianchor/);
       // Even when PATH starts with another node, the installed launcher uses its bound interpreter.
       const launched = spawnSync(path.join(prefix, 'bin/ianchor'), ['--version'], { encoding: 'utf8', env: { ...process.env, PATH: mocks } });
       assert.equal(launched.status, 0, launched.stderr); assert.equal(launched.stdout.trim(), version);

@@ -19,6 +19,7 @@ class Ianchor < Formula
 
     libexec.install "bin", "lib", "package.json", "package-lock.json", "node_modules"
     (bin/"ianchor").write_env_script(node, ["\"#{libexec}/bin/ianchor.js\""], {})
+    generate_completions_from_executable(bin/"ianchor", "completion", shells: [:zsh, :bash])
     system node, "--input-type=module", "-e", sqlite_probe, libexec/"lib/db.js", buildpath/"sqlite-install-check"
   end
 

@@ -54,6 +54,18 @@ describe('db', () => {
     assert.equal(entry, undefined);
   });
 
+  it('opens existing entries read-only and rejects writes', () => {
+    addEntry(db, { name: 'readable', type: 'file' });
+    const reader = openDb(tmpDir, { readonly: true });
+    try {
+      assert.equal(reader.readonly, true);
+      assert.equal(getEntry(reader, 'readable').name, 'readable');
+      assert.throws(() => addEntry(reader, { name: 'no-write', type: 'file' }), /readonly/);
+    } finally {
+      reader.close();
+    }
+  });
+
   it('returns undefined for nonexistent entry', () => {
     const entry = getEntry(db, 'nonexistent');
     assert.equal(entry, undefined);

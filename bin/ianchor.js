@@ -12,6 +12,7 @@ import { recoverFile } from '../lib/recover.js';
 import { relinkFile } from '../lib/relink.js';
 import { removeFile } from '../lib/remove.js';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -214,17 +215,19 @@ program
 program
   .command('__complete', { hidden: true })
   .action(() => {
+    let db;
     try {
       const icloudBase = getICloudDrivePath();
       const configDir = getConfigDir(icloudBase);
-      const db = openDb(configDir);
+      db = openDb(configDir, { readonly: true });
       const entries = getAllEntries(db);
       for (const entry of entries) {
         console.log(entry.name);
       }
-      db.close();
     } catch {
       // Silently fail during completion
+    } finally {
+      db?.close();
     }
   });
 
@@ -233,68 +236,11 @@ program
   .description('Output shell completion script')
   .argument('[shell]', 'shell type: zsh or bash', 'zsh')
   .action((shell) => {
-    if (shell === 'zsh') {
-      const script = `#compdef ianchor
-
-_ianchor() {
-  local -a commands
-  commands=(
-    'init:Initialize ianchor'
-    'list:List all tracked config files'
-    'add:Add a file or directory to iCloud'
-    'recover:Recover a file from iCloud'
-    'relink:Re-create symlink for an unlinked file'
-    'remove:Remove an entry and delete from iCloud'
-  )
-
-  _arguments -C \\
-    '1:command:->cmds' \\
-    '*::arg:->args'
-
-  case "\$state" in
-    cmds)
-      _describe -t commands 'ianchor command' commands
-      ;;
-    args)
-      case "\$words[1]" in
-        recover|relink|remove)
-          local -a entries
-          entries=("\${(@f)$(ianchor __complete 2>/dev/null)}")
-          _describe -t entries 'entry name' entries
-          ;;
-        add)
-          _files
-          ;;
-      esac
-      ;;
-  esac
-}
-
-_ianchor "\$@"`.trimStart();
-      console.log(script);
-    } else {
-      const script = `###-begin-ianchor-completions-###
-_ianchor_complete() {
-  local cur prev commands
-  cur="\${COMP_WORDS[COMP_CWORD]}"
-  prev="\${COMP_WORDS[COMP_CWORD-1]}"
-  commands="init list add recover relink remove"
-
-  case "\$prev" in
-    recover|relink|remove)
-      COMPREPLY=( $(compgen -W "$(ianchor __complete 2>/dev/null)" -- "\$cur") )
-      return
-      ;;
-  esac
-
-  if [[ \$COMP_CWORD -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "\$commands" -- "\$cur") )
-  fi
-}
-complete -F _ianchor_complete ianchor
-###-end-ianchor-completions-###`.trimStart();
-      console.log(script);
+    if (!['zsh', 'bash'].includes(shell)) {
+      program.error(`Unsupported shell: ${shell}. Expected zsh or bash.`);
     }
+    const script = readFileSync(new URL(`../lib/completions/ianchor.${shell}`, import.meta.url), 'utf8');
+    process.stdout.write(script);
   });
 
 program.parse();

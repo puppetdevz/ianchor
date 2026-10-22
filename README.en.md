@@ -115,12 +115,37 @@ ianchor remove -y zshrc  # skip confirmation
 
 ## Shell Completion
 
-Generate a zsh or bash completion script, including tracked entry names:
+Complete subcommands, options, local paths for `add`, and tracked entry names for `recover/relink/remove`. **Type `ianchor` with a trailing space, then press Tab to complete subcommands. Without the space, the shell completes executable names.**
+
+### Homebrew installation
+
+The Formula installs zsh and bash completion files. In zsh, include Homebrew's completion directory **before** running `compinit`:
+
+```zsh
+fpath=("$(brew --prefix)/share/zsh/site-functions" $fpath)
+autoload -Uz compinit
+compinit
+```
+
+If a framework such as Oh My Zsh runs `compinit` for you, place only the `fpath` line before framework initialization; do not initialize twice. Bash requires Homebrew's bash-completion to be enabled, or the manual loading method below.
+
+### Manual loading
+
+`ianchor completion zsh/bash` only prints a script; it does not activate completion. In the current zsh session, run this after `compinit`:
+
+```zsh
+source <(ianchor completion zsh)
+```
+
+For bash:
 
 ```bash
-ianchor completion zsh
-ianchor completion bash
+source <(ianchor completion bash)
 ```
+
+For persistence, put the appropriate `source` line in your shell startup file (`~/.zshrc` for zsh or `~/.bashrc` for bash; login bash must also load `~/.bashrc` from `~/.bash_profile`). Alternatively, save the zsh script as `_ianchor` in a directory on `$fpath`, then rerun `compinit`; manual sourcing is unnecessary.
+
+If `_ianchor: function definition file not found` persists after an upgrade, first verify that `_ianchor` exists on `$fpath`. Once the file is installed, remove stale `~/.zcompdump*` caches and restart the terminal.
 
 ## License
 
