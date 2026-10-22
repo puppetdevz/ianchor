@@ -53,7 +53,7 @@ Before the first release, prepare an existing `puppetdevz/homebrew-puppetdevz` r
 
 The workflow reads metadata through Ruby's syntax tree without executing tap code. It accepts static, unconditional, direct DSL declarations within a single `Ianchor < Formula` class. Dynamic/indirect calls, conditional metadata and unsupported class-level structures are rejected before publishing. Verify the actual version and normalize those declarations before rerunning; do not bypass version checks. Release query failures report sanitized categories and recovery guidance, never raw error output.
 
-Identical reruns create no duplicate Release or commit. Template fixes can sync at the same version; older versions cannot overwrite newer ones. If tap push fails after Release creation, the Release is retained: fix permissions/network or resolve concurrent changes, then rerun the same tag. CI validates the lockfile with that run's Homebrew Node, not every future ABI or Mac architecture. Formula tests exercise SQLite only in temporary directories and never initialize real iCloud data.
+Identical reruns create no duplicate Release or commit, and older versions cannot overwrite newer ones. Same-version reruns can restore the tap Formula to the rendered template from that tag. Template fixes committed after tagging require a new version; do not move existing tags. If tap push fails after Release creation, the Release is retained: fix permissions/network or resolve concurrent changes, then rerun the same tag. CI validates the lockfile with that run's Homebrew Node, not every future ABI or Mac architecture. Formula tests exercise SQLite only in temporary directories and never initialize real iCloud data.
 
 ## Usage
 

@@ -2,6 +2,32 @@
 
 [English](CHANGELOG.en.md)
 
+## 1.1.0 - 2026-10-22
+
+### 新功能
+
+- 新增源码仓库权威 Homebrew Formula 模板，绑定 Homebrew Node，通过锁文件安装依赖并禁用生命周期脚本；仅下载匹配 Node ABI、macOS 和架构的 SQLite 预编译包，失败即停止，不回退源码编译。
+- 支持首次向已初始化的个人 tap 创建 `Formula/ianchor.rb`；安装和 Formula 测试使用临时目录验证 SQLite 读写，不操作真实 iCloud 数据。
+
+### 修复
+
+- 将个人 tap 修正为 `puppetdevz/homebrew-puppetdevz`（tap 名称 `puppetdevz/puppetdevz`）。
+- 校验稳定标签与包版本一致，使用 Ruby 语法树检查静态 Formula 元数据，拒绝动态、条件及间接声明；防止版本降级，并检测 tap 分支并发变更。
+- 同版本同内容重跑不重复创建 Release 或提交；Release 查询失败时停止发布并输出脱敏分类和恢复指引，tap 推送失败时保留已创建的 Release，允许修复后重跑。
+
+### 依赖
+
+- 将 `better-sqlite3` 锁定版本从 12.8.0 更新至 12.10.0。
+
+### 文档
+
+- 补充旧 tap 迁移、首次发布前置条件、预编译安装限制及失败恢复说明；澄清同版本重跑只使用该标签的模板，标签创建后的模板修复需随新版本发布。
+
+### 注意事项
+
+- 维护者须先准备个人 tap 仓库及含提交的 `main` 分支，并配置可写的 `HOMEBREW_TAP_TOKEN`；工作流不会创建仓库或修改分支保护。
+- Homebrew Node 跨 ABI 升级后可能需要重新安装；不保证未来所有 ABI 都有预编译产物，也不代表所有 Mac 架构均已实机验证。
+
 ## 1.0.0 - 2026-10-22
 
 ### 修复

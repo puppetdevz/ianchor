@@ -2,6 +2,32 @@
 
 [简体中文](CHANGELOG.md)
 
+## 1.1.0 - 2026-10-22
+
+### Features
+
+- Add an authoritative Homebrew Formula template in the source repository. Bind the launcher to Homebrew Node, install locked dependencies with lifecycle scripts disabled, and download only SQLite prebuilds matching the Node ABI, macOS and architecture. Stop on failure without source-compilation fallback.
+- Support creating `Formula/ianchor.rb` in an initialized personal tap on the first release. Installation and Formula tests verify SQLite reads and writes in temporary directories without touching real iCloud data.
+
+### Fixes
+
+- Correct the personal tap repository to `puppetdevz/homebrew-puppetdevz` (tap name: `puppetdevz/puppetdevz`).
+- Require stable tags to match the package version. Validate static Formula metadata through Ruby's syntax tree, rejecting dynamic, conditional and indirect declarations. Prevent downgrades and detect concurrent tap branch changes.
+- Skip duplicate Releases and commits on identical same-version reruns. Stop publishing on Release query failures with sanitized categories and recovery guidance. Preserve a created Release if tap push fails so maintainers can fix the issue and rerun.
+
+### Dependencies
+
+- Update the locked `better-sqlite3` version from 12.8.0 to 12.10.0.
+
+### Documentation
+
+- Document old-tap migration, first-release prerequisites, prebuild-only installation limits and failure recovery. Clarify that same-version reruns use that tag's template; template fixes committed after tagging require a new version.
+
+### Notes
+
+- Maintainers must prepare the personal tap repository with a committed `main` branch and configure a writable `HOMEBREW_TAP_TOKEN`. The workflow does not create repositories or change branch protection.
+- Homebrew Node ABI upgrades may require reinstallation. Prebuild availability for every future ABI and real-device verification of every Mac architecture are not guaranteed.
+
 ## 1.0.0 - 2026-10-22
 
 ### Fixes
