@@ -48,6 +48,10 @@ ianchor list --json
 
 ### Recover a config file
 
+Restore a file or directory to its original location on this device only, replacing the symlink with an independent local copy. The iCloud file and database entry are preserved, so other devices keep working. Local edits no longer sync after recovery. `ianchor list` shows the local entry as `unlinked`; use `ianchor relink <name>` to rejoin syncing.
+
+Cloud contents are still backed up to `.bak/` before recovery. Entries without an original path are rejected without deleting cloud data.
+
 ```bash
 ianchor recover .zshrc
 ianchor recover --force .zshrc  # overwrite existing file
@@ -60,6 +64,8 @@ ianchor relink .zshrc
 ```
 
 ### Remove a tracked file
+
+**This deletes the shared iCloud file and database entry, breaking links on other devices. Use `recover` to stop syncing on this device only.**
 
 ```bash
 ianchor remove .zshrc

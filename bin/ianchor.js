@@ -133,7 +133,7 @@ program
 
 program
   .command('recover <name>')
-  .description('Recover a file from iCloud back to its original location')
+  .description('Restore a local copy without deleting the iCloud file or tracking entry')
   .option('--force', 'overwrite if file exists at original location', false)
   .action((name, options) => {
     try {
@@ -145,7 +145,8 @@ program
         configDir,
         force: options.force,
       });
-      console.log(chalk.green(`Recovered "${result.name}".`));
+      console.log(chalk.green(`Recovered "${result.name}" locally.`));
+      console.log('iCloud file and tracking entry preserved; other devices can keep using them.');
       if (result.originalPath) {
         console.log(`  Restored to: ${result.originalPath}`);
       }

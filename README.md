@@ -48,7 +48,9 @@ ianchor list --json
 
 ### 恢复配置文件
 
-将 iCloud 中的文件拷贝回原始位置，取消符号链接。
+仅在当前设备上将 iCloud 中的文件或目录拷贝回原始位置，替换符号链接为独立的本地副本。保留云端文件及数据库记录，其他设备的链接不受影响。恢复后本机的修改不再同步，`ianchor list` 会显示为 `unlinked`，可用 `ianchor relink <name>` 重新加入同步。
+
+恢复前仍会备份云端内容到 `.bak/`；若条目缺少原始路径，则报错且保留云端数据。
 
 ```bash
 ianchor recover .zshrc
@@ -65,7 +67,7 @@ ianchor relink .zshrc
 
 ### 移除追踪
 
-从数据库中删除记录并删除 iCloud 中的文件。
+从数据库中删除记录并删除 iCloud 中的文件。**这是全局删除，会导致其他设备指向该文件的链接失效；仅需当前设备退出同步时，请使用 `recover`。**
 
 ```bash
 ianchor remove .zshrc
