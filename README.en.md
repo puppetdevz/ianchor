@@ -11,15 +11,15 @@ iAnchor moves config files/directories into an iCloud Drive directory, then crea
 ## Install
 
 ```bash
-brew tap vissong/ianchor
-brew install ianchor
+brew tap puppetdevz/ianchor
+brew install puppetdevz/ianchor/ianchor
 ```
 
 ## Upgrade
 
 ```bash
 brew update
-brew upgrade ianchor
+brew upgrade puppetdevz/ianchor/ianchor
 ```
 
 ## Usage

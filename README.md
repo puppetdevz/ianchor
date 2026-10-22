@@ -11,15 +11,15 @@ iAnchor 将配置文件/目录移动到 iCloud Drive 中的指定目录，然后
 ## 安装
 
 ```bash
-brew tap vissong/ianchor
-brew install ianchor
+brew tap puppetdevz/ianchor
+brew install puppetdevz/ianchor/ianchor
 ```
 
 ## 升级
 
 ```bash
 brew update
-brew upgrade ianchor
+brew upgrade puppetdevz/ianchor/ianchor
 ```
 
 ## 使用
