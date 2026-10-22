@@ -13,16 +13,35 @@ iAnchor 将配置文件/目录移动到 iCloud Drive 中的指定目录，然后
 需要 macOS、已启用的 iCloud Drive 和 Homebrew。
 
 ```bash
-brew tap puppetdevz/ianchor
-brew install puppetdevz/ianchor/ianchor
+brew tap puppetdevz/puppetdevz
+brew install puppetdevz/puppetdevz/ianchor
 ```
+
+此个人 tap 对应仓库 [puppetdevz/homebrew-puppetdevz](https://github.com/puppetdevz/homebrew-puppetdevz)。
 
 ## 升级
 
+已从新 tap 安装的用户：
+
 ```bash
 brew update
-brew upgrade puppetdevz/ianchor/ianchor
+brew upgrade puppetdevz/puppetdevz/ianchor
 ```
+
+### 从旧 tap 迁移
+
+若原先从 `vissong/ianchor` 安装，先切换安装来源，不能仅替换升级命令：
+
+```bash
+brew uninstall ianchor
+brew untap vissong/ianchor
+brew tap puppetdevz/puppetdevz
+brew install puppetdevz/puppetdevz/ianchor
+```
+
+若使用的旧 tap 是 `puppetdevz/ianchor`，将上面的 untap 命令替换为 `brew untap puppetdevz/ianchor`；只移除实际使用的旧 tap。
+
+迁移只更换 Homebrew 安装来源，命令仍为 `ianchor`，安装仍位于 `$(brew --prefix)/Cellar/ianchor/<版本>`。卸载程序不会删除 iCloud 同步目录、追踪数据库或 `~/.config/ianchor.json`，无需先执行 `recover` 或重新初始化。
 
 ## 使用
 

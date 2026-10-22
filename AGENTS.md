@@ -21,6 +21,7 @@ No build step — ES modules run directly. Entry point: `bin/ianchor.js`.
 **CLI layer** (`bin/ianchor.js`): Uses `commander` to parse commands, each dispatching to a function in `lib/`.
 
 **Core modules** (`lib/`):
+
 - `icloud.js` — Detects iCloud Drive path (`~/Library/Mobile Documents/com~apple~CloudDocs/`)
 - `db.js` — SQLite wrapper (via `better-sqlite3`) managing the `entries` table
 - `init.js` — Creates config directory in iCloud, opens DB, discovers existing files
@@ -44,4 +45,4 @@ Tests use Node.js built-in `node:test` module with `node:assert/strict`. Each `l
 - ES modules (`"type": "module"` in package.json)
 - Node.js >=18.0.0 required
 - Dependencies: `better-sqlite3`, `chalk`, `cli-table3`, `commander`
-- Distribution via Homebrew (tap repository: `puppetdevz/homebrew-ianchor`, tap name: `puppetdevz/ianchor`); release via `scripts/tag.sh` + GitHub Actions
+- Distribution via Homebrew (tap repository: `puppetdevz/homebrew-puppetdevz`, tap name: `puppetdevz/puppetdevz`); release via `scripts/tag.sh` + GitHub Actions. The personal tap contains `Formula/ianchor.rb`; the release workflow updates only that formula.

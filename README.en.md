@@ -13,16 +13,35 @@ iAnchor moves config files/directories into an iCloud Drive directory, then crea
 Requires macOS, enabled iCloud Drive, and Homebrew.
 
 ```bash
-brew tap puppetdevz/ianchor
-brew install puppetdevz/ianchor/ianchor
+brew tap puppetdevz/puppetdevz
+brew install puppetdevz/puppetdevz/ianchor
 ```
+
+This personal tap is hosted at [puppetdevz/homebrew-puppetdevz](https://github.com/puppetdevz/homebrew-puppetdevz).
 
 ## Upgrade
 
+For installations already using the new tap:
+
 ```bash
 brew update
-brew upgrade puppetdevz/ianchor/ianchor
+brew upgrade puppetdevz/puppetdevz/ianchor
 ```
+
+### Migrate from an old tap
+
+If you installed from `vissong/ianchor`, switch the installation source first rather than just changing the upgrade command:
+
+```bash
+brew uninstall ianchor
+brew untap vissong/ianchor
+brew tap puppetdevz/puppetdevz
+brew install puppetdevz/puppetdevz/ianchor
+```
+
+If your old tap was `puppetdevz/ianchor`, replace the untap command above with `brew untap puppetdevz/ianchor`; remove only the old tap you actually used.
+
+Migration only changes the Homebrew installation source. The command remains `ianchor`, installed under `$(brew --prefix)/Cellar/ianchor/<version>`. Uninstalling the program does not delete the iCloud sync directory, tracking database, or `~/.config/ianchor.json`. There is no need to run `recover` or initialize again.
 
 ## Usage
 

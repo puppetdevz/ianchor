@@ -46,16 +46,23 @@ jobs:
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz"
 
           TARBALL_PATH=$(mktemp)
-          trap 'rm -f "$TARBALL_PATH"' EXIT
+          TAP_PATH=$(mktemp -d)
+          trap 'rm -f "$TARBALL_PATH"; rm -rf "$TAP_PATH"' EXIT
           curl --fail --location --retry 3 --output "$TARBALL_PATH" "$TARBALL_URL"
           SHA256=$(shasum -a 256 "$TARBALL_PATH" | awk '{print $1}')
           echo "sha256: ${SHA256}"
 
-          git clone https://x-access-token:${GH_TOKEN}@github.com/puppetdevz/homebrew-ianchor.git /tmp/homebrew-tap
-          cd /tmp/homebrew-tap
+          git clone https://x-access-token:${GH_TOKEN}@github.com/puppetdevz/homebrew-puppetdevz.git "$TAP_PATH"
+          cd "$TAP_PATH"
 
-          sed -i '' "s|url \".*\"|url \"${TARBALL_URL}\"|" Formula/ianchor.rb
-          sed -i '' "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/ianchor.rb
+          if [ ! -f Formula/ianchor.rb ]; then
+            echo "::error::Missing Formula/ianchor.rb in puppetdevz/homebrew-puppetdevz; initialize the formula before releasing." >&2
+            exit 1
+          fi
+
+          sed -i.bak "s|url \".*\"|url \"${TARBALL_URL}\"|" Formula/ianchor.rb
+          sed -i.bak "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/ianchor.rb
+          rm -f Formula/ianchor.rb.bak
 
           if [ -n "$(git diff --name-only Formula/ianchor.rb)" ]; then
             git config user.name "github-actions[bot]"
