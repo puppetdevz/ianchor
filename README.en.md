@@ -68,6 +68,8 @@ Without `--dir`, initialization prompts for a directory name; press Enter for `i
 
 Initialization discovers and registers existing cloud configs but does not create local symlinks. Initialize other devices too, then run `relink` for entries with a known original path.
 
+The shared database stores the absolute original path recorded when an entry was added; it is not rewritten for the current device. Relinking across devices requires identical original paths, including usernames and config locations. Do not run `relink` directly when those paths differ.
+
 ### Add a config file
 
 ```bash

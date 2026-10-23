@@ -2,6 +2,19 @@
 
 [简体中文](CHANGELOG.md)
 
+## 1.1.1 - 2026-10-23
+
+### Fixes
+
+- Fix Tab completion registration when loading the zsh and bash scripts, and install completion files through the Homebrew Formula. Completion queries open existing databases read-only instead of creating missing databases.
+- Use NUL-delimited candidates and escape spaces, colons and shell metacharacters literally. Complete entries starting with `-` only after `--`, without changing global shell settings.
+- Move the Homebrew release target to `puppetdevz/homebrew-tap` (tap name: `puppetdevz/tap`), updating release tests and installation and upgrade instructions.
+
+### Documentation
+
+- Document completion loading, persistent configuration and input boundaries, plus migration from old taps. `HOMEBREW_TAP_TOKEN` needs Contents read/write permission for the new repository.
+- Clarify that cross-device relinking requires identical absolute original paths in the database; usernames and config locations are not adapted automatically.
+
 ## 1.1.0 - 2026-10-22
 
 ### Features
