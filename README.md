@@ -13,11 +13,11 @@ iAnchor 将配置文件/目录移动到 iCloud Drive 中的指定目录，然后
 需要 macOS、已启用的 iCloud Drive 和 Homebrew。
 
 ```bash
-brew tap puppetdevz/puppetdevz
-brew install puppetdevz/puppetdevz/ianchor
+brew tap puppetdevz/tap
+brew install puppetdevz/tap/ianchor
 ```
 
-此个人 tap 对应仓库 [puppetdevz/homebrew-puppetdevz](https://github.com/puppetdevz/homebrew-puppetdevz)。
+此个人 tap 对应仓库 [puppetdevz/homebrew-tap](https://github.com/puppetdevz/homebrew-tap)。
 
 Formula 仅声明 `node` 为直接依赖，入口绑定 Homebrew Node，不受 nvm 等 PATH 配置影响。`better-sqlite3` 必须有匹配该 Node ABI、macOS 和架构的预编译包；下载或加载失败会中止安装，不回退源码编译，也不要求额外声明 Python。Node 自身仍可能有传递依赖，安装需要联网。Homebrew Node 跨 ABI 升级后，旧原生模块可能失效，可重新安装以获取匹配产物；没有产物时请报告错误，不要尝试源码编译。
 
@@ -27,7 +27,7 @@ Formula 仅声明 `node` 为直接依赖，入口绑定 Homebrew Node，不受 n
 
 ```bash
 brew update
-brew upgrade puppetdevz/puppetdevz/ianchor
+brew upgrade puppetdevz/tap/ianchor
 ```
 
 ### 从旧 tap 迁移
@@ -37,11 +37,11 @@ brew upgrade puppetdevz/puppetdevz/ianchor
 ```bash
 brew uninstall ianchor
 brew untap vissong/ianchor
-brew tap puppetdevz/puppetdevz
-brew install puppetdevz/puppetdevz/ianchor
+brew tap puppetdevz/tap
+brew install puppetdevz/tap/ianchor
 ```
 
-若使用的旧 tap 是 `puppetdevz/ianchor`，将上面的 untap 命令替换为 `brew untap puppetdevz/ianchor`；只移除实际使用的旧 tap。
+若使用的旧 tap 是 `puppetdevz/puppetdevz` 或 `puppetdevz/ianchor`，将上面的 untap 命令替换为 `brew untap puppetdevz/puppetdevz` 或 `brew untap puppetdevz/ianchor`；只移除实际使用的旧 tap。
 
 迁移只更换 Homebrew 安装来源，命令仍为 `ianchor`，安装仍位于 `$(brew --prefix)/Cellar/ianchor/<版本>`。卸载程序不会删除 iCloud 同步目录、追踪数据库或 `~/.config/ianchor.json`，无需先执行 `recover` 或重新初始化。
 
@@ -49,7 +49,7 @@ brew install puppetdevz/puppetdevz/ianchor
 
 源码仓库的 `Formula/ianchor.rb` 是带占位符的权威模板，不能直接安装。稳定版 `vMAJOR.MINOR.PATCH` 标签必须与 `package.json` 版本一致；Actions 使用该标签提交中的模板和源码归档 SHA256，将完整 Formula 同步到 tap 的 `main`，不在 tap 单独维护安装逻辑。预发布标签会被拒绝。
 
-首次发布前，维护者需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-puppetdevz`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
+首次发布前，维护者需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-tap`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。若使用 fine-grained PAT，需将 `puppetdevz/homebrew-tap` 纳入授权仓库并授予 Contents 读写权限；旧 token 若只授权旧仓库，必须更新该 secret。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
 
 工作流用 Ruby 语法树读取元数据，不执行 tap 代码；只接受单个 `Ianchor < Formula` 类中的静态、无条件、直接 DSL 声明。动态/间接调用、条件元数据及不支持的类级结构会在发布前拒绝；维护者应核实实际版本后整理为静态声明再重跑，不要通过移除版本校验绕过。Release 查询失败只输出脱敏分类及修复指引，不回显原始错误。
 

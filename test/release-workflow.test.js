@@ -78,7 +78,7 @@ const args = process.argv.slice(2), e = process.env;
 fs.appendFileSync(e.LOG, 'git ' + args.join(' ') + '\\n');
 if (args[0] === 'clone') {
   if (e.CLONE_FAIL) process.exit(128);
-  const url = args.indexOf('https://github.com/puppetdevz/homebrew-puppetdevz.git');
+  const url = args.indexOf('https://github.com/puppetdevz/homebrew-tap.git');
   if (url < 0) process.exit(90);
   args[url] = e.REMOTE;
 }
@@ -185,7 +185,8 @@ describe('release workflow: real isolated Git index and mocked network', () => {
   it('uses Homebrew node, tag env, non-persisted credentials and serialized main publishing', () => {
     assert.doesNotMatch(workflow, /setup-node|node-version:|run: npm install|TAG="\$\{\{/);
     assert.match(workflow, /persist-credentials: false/);
-    assert.match(workflow, /group: homebrew-puppetdevz-ianchor/);
+    assert.match(workflow, /group: homebrew-tap-ianchor/);
+    assert.doesNotMatch(workflow, /puppetdevz\/homebrew-puppetdevz|homebrew-puppetdevz-ianchor/);
     assert.match(workflow, /cancel-in-progress: false/);
     assert.match(workflow, /TAG: \$\{\{ github.ref_name \}\}/);
     assert.match(stepScript('Use Homebrew Node'), /brew --prefix node/);
@@ -201,7 +202,7 @@ describe('release workflow: real isolated Git index and mocked network', () => {
     assert.match(f.read('Formula/ianchor.rb'), /version "9\.9\.9"/);
     assert.ok(f.read('Formula/ianchor.rb').includes(`sha256 "${sha}"`));
     assert.ok(f.read('Formula/ianchor.rb').includes('url "https://github.com/puppetdevz/ianchor/archive/refs/tags/v9.9.9.tar.gz"'));
-    assert.match(r.log, /git clone --branch main --single-branch https:\/\/github.com\/puppetdevz\/homebrew-puppetdevz.git/);
+    assert.match(r.log, /git clone --branch main --single-branch https:\/\/github.com\/puppetdevz\/homebrew-tap.git/);
     assert.match(r.log, /git add -- Formula\/ianchor.rb/);
     assert.match(r.log, /git push origin HEAD:main/);
     assert.equal((r.log.match(/gh release create/g) ?? []).length, 1);
@@ -340,11 +341,14 @@ describe('release workflow: real isolated Git index and mocked network', () => {
   it('documents template ownership, precompiled-only constraints, prerequisites and migration bilingually', () => {
     for (const name of ['README.md', 'README.en.md']) {
       const s = fs.readFileSync(path.join(root, name), 'utf8');
-      for (const text of ['brew tap puppetdevz/puppetdevz', 'brew install puppetdevz/puppetdevz/ianchor', 'brew upgrade puppetdevz/puppetdevz/ianchor', 'brew uninstall ianchor', 'brew untap vissong/ianchor', 'Formula/ianchor.rb', 'HOMEBREW_TAP_TOKEN', 'better-sqlite3']) assert.ok(s.includes(text), `${name}: ${text}`);
-      assert.doesNotMatch(s, /brew (install|upgrade) puppetdevz\/ianchor\/ianchor/);
+      for (const text of ['brew tap puppetdevz/tap', 'brew install puppetdevz/tap/ianchor', 'brew upgrade puppetdevz/tap/ianchor', 'puppetdevz/homebrew-tap', 'brew uninstall ianchor', 'brew untap vissong/ianchor', 'brew untap puppetdevz/puppetdevz', 'Formula/ianchor.rb', 'HOMEBREW_TAP_TOKEN', 'better-sqlite3']) assert.ok(s.includes(text), `${name}: ${text}`);
+      assert.doesNotMatch(s, /brew (install|upgrade) puppetdevz\/(ianchor|puppetdevz)\/ianchor/);
+      assert.doesNotMatch(s, /puppetdevz\/homebrew-puppetdevz|brew tap puppetdevz\/puppetdevz/);
     }
     const instructions = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
     assert.match(instructions, /Formula\/ianchor\.rb/);
-    assert.doesNotMatch(instructions, /puppetdevz\/homebrew-ianchor/);
+    assert.match(instructions, /puppetdevz\/homebrew-tap/);
+    assert.match(instructions, /tap name: `puppetdevz\/tap`/);
+    assert.doesNotMatch(instructions, /puppetdevz\/homebrew-(ianchor|puppetdevz)/);
   });
 });

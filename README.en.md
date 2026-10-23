@@ -13,11 +13,11 @@ iAnchor moves config files/directories into an iCloud Drive directory, then crea
 Requires macOS, enabled iCloud Drive, and Homebrew.
 
 ```bash
-brew tap puppetdevz/puppetdevz
-brew install puppetdevz/puppetdevz/ianchor
+brew tap puppetdevz/tap
+brew install puppetdevz/tap/ianchor
 ```
 
-This personal tap is hosted at [puppetdevz/homebrew-puppetdevz](https://github.com/puppetdevz/homebrew-puppetdevz).
+This personal tap is hosted at [puppetdevz/homebrew-tap](https://github.com/puppetdevz/homebrew-tap).
 
 The Formula declares only `node` as a direct dependency and binds the launcher to Homebrew Node, independent of nvm or other PATH settings. `better-sqlite3` requires a prebuilt binary matching that Node ABI, macOS and architecture. Download/load failures stop installation: there is no source-compilation fallback or extra Python declaration. Node may still have transitive dependencies, and installation requires network access. A Homebrew Node ABI upgrade can invalidate an already-installed native module; reinstall to fetch a matching prebuild. If none exists, report the error rather than compiling from source.
 
@@ -27,7 +27,7 @@ For installations already using the new tap:
 
 ```bash
 brew update
-brew upgrade puppetdevz/puppetdevz/ianchor
+brew upgrade puppetdevz/tap/ianchor
 ```
 
 ### Migrate from an old tap
@@ -37,11 +37,11 @@ If you installed from `vissong/ianchor`, switch the installation source first ra
 ```bash
 brew uninstall ianchor
 brew untap vissong/ianchor
-brew tap puppetdevz/puppetdevz
-brew install puppetdevz/puppetdevz/ianchor
+brew tap puppetdevz/tap
+brew install puppetdevz/tap/ianchor
 ```
 
-If your old tap was `puppetdevz/ianchor`, replace the untap command above with `brew untap puppetdevz/ianchor`; remove only the old tap you actually used.
+If your old tap was `puppetdevz/puppetdevz` or `puppetdevz/ianchor`, replace the untap command above with `brew untap puppetdevz/puppetdevz` or `brew untap puppetdevz/ianchor`; remove only the old tap you actually used.
 
 Migration only changes the Homebrew installation source. The command remains `ianchor`, installed under `$(brew --prefix)/Cellar/ianchor/<version>`. Uninstalling the program does not delete the iCloud sync directory, tracking database, or `~/.config/ianchor.json`. There is no need to run `recover` or initialize again.
 
@@ -49,7 +49,7 @@ Migration only changes the Homebrew installation source. The command remains `ia
 
 The source repository's `Formula/ianchor.rb` is the authoritative placeholder template, not a directly installable Formula. A stable `vMAJOR.MINOR.PATCH` tag must match `package.json`. Actions renders the template from that tagged commit with the source archive SHA256 and syncs the complete Formula to the tap's `main`. Keep installation changes in the source template, not in tap-only edits. Prerelease tags are rejected.
 
-Before the first release, prepare an existing `puppetdevz/homebrew-puppetdevz` repository with at least one commit on `main`, and configure `HOMEBREW_TAP_TOKEN` in the source repository with permission to push directly to that branch. Missing `Formula/` directories or the target Formula are created automatically; the workflow does not create repositories or change branch protection. Maintainers must explicitly invoke the release process; do not move old tags to adopt a new workflow.
+Before the first release, prepare an existing `puppetdevz/homebrew-tap` repository with at least one commit on `main`, and configure `HOMEBREW_TAP_TOKEN` in the source repository with permission to push directly to that branch. For a fine-grained PAT, include `puppetdevz/homebrew-tap` in the authorized repositories and grant Contents read/write permission; update the secret if the old token only covered the old repository. Missing `Formula/` directories or the target Formula are created automatically; the workflow does not create repositories or change branch protection. Maintainers must explicitly invoke the release process; do not move old tags to adopt a new workflow.
 
 The workflow reads metadata through Ruby's syntax tree without executing tap code. It accepts static, unconditional, direct DSL declarations within a single `Ianchor < Formula` class. Dynamic/indirect calls, conditional metadata and unsupported class-level structures are rejected before publishing. Verify the actual version and normalize those declarations before rerunning; do not bypass version checks. Release query failures report sanitized categories and recovery guidance, never raw error output.
 

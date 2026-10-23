@@ -5,7 +5,11 @@
 - 原文档编写回合边界：当时只新增本 Markdown；后续实施授权覆盖该历史边界，但不包含真实发布、推送或用户 Homebrew 安装。
 - 实施入口：本文件。真实发布必须由用户另行触发 `release` 技能，本文件不是发布授权。
 
-### 后续实施授权补充
+## Tap 地址迁移补充
+
+个人 tap 已由 `puppetdevz/homebrew-puppetdevz`（`puppetdevz/puppetdevz`）迁至 `puppetdevz/homebrew-tap`（`puppetdevz/tap`）。本文下方旧地址保留为原始需求与验收基线，不再作为当前操作目标；第 6.3 节安装、升级与测试命令中的 tap 前缀应改用 `puppetdevz/tap`。当前发布配置和迁移说明以 `.github/workflows/release.yml`、`README.md` 与 `README.en.md` 为准。`HOMEBREW_TAP_TOKEN` 必须具有新仓库 Contents 读写权限，不能仅凭旧 secret 已存在就认定可发布。
+
+## 后续实施授权补充
 
 实施中实际复现了 `better-sqlite3 12.8.0` 缺少 Node 26 / ABI 147 / darwin-arm64 预编译产物（下载返回 404）。用户随后明确选择允许仅升级 SQLite 依赖及锁文件、寻找最小可用升级，仍禁止源码编译。首个支持 Node 26 且实际下载成功的版本为 `12.10.0`（`12.9.0` 无该产物）。
 

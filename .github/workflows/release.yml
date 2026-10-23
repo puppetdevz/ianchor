@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: homebrew-puppetdevz-ianchor
+  group: homebrew-tap-ianchor
   cancel-in-progress: false
 
 jobs:
@@ -160,7 +160,7 @@ jobs:
           chmod 700 "$WORK/askpass"
           export GIT_ASKPASS="$WORK/askpass" GIT_TERMINAL_PROMPT=0
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
-          git clone --branch main --single-branch https://github.com/puppetdevz/homebrew-puppetdevz.git "$TAP_PATH"
+          git clone --branch main --single-branch https://github.com/puppetdevz/homebrew-tap.git "$TAP_PATH"
           BASE=$(git -C "$TAP_PATH" rev-parse HEAD)
           if [ -L "$TAP_PATH/Formula" ] || [ -L "$TAP_PATH/Formula/ianchor.rb" ]; then
             echo "::error::Formula paths must not be symbolic links" >&2
