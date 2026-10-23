@@ -117,6 +117,8 @@ ianchor remove -y zshrc  # skip confirmation
 
 Complete subcommands, options, local paths for `add`, and tracked entry names for `recover/relink/remove`. **Type `ianchor` with a trailing space, then press Tab to complete subcommands. Without the space, the shell completes executable names.**
 
+Names containing spaces, colons, or shell metacharacters are escaped literally. Start with an ordinary name prefix and press Tab; do not type unescaped `$()` or backticks, which the shell interprets before completion. Entries starting with `-` require `--`, for example `ianchor recover -- -name`. Names containing newline, carriage return, or NUL are omitted from completion. With default Bash settings, displaying multiple candidates may require pressing Tab twice.
+
 ### Homebrew installation
 
 The Formula installs zsh and bash completion files. In zsh, include Homebrew's completion directory **before** running `compinit`:

@@ -117,6 +117,8 @@ ianchor remove -y zshrc  # 跳过确认
 
 支持补全子命令、选项、`add` 的本地路径，以及 `recover/relink/remove` 的已追踪条目名。**输入 `ianchor`（末尾有空格）再按 Tab 才是补子命令；没有空格时补的是可执行文件名。**
 
+含空格、冒号或 shell 特殊字符的名称会按字面值转义；建议输入普通名称前缀再按 Tab，不要直接输入未转义的 `$()` 或反引号（它们会先被 shell 解释）。以 `-` 开头的条目必须放在 `--` 后，例如 `ianchor recover -- -name`；含换行、回车或 NUL 的条目不提供补全。bash 默认可能需要按两次 Tab 才显示多个候选。
+
 ### Homebrew 安装
 
 Formula 会安装 zsh 和 bash 补全文件。zsh 需要在运行 `compinit` **之前**包含 Homebrew 补全目录：

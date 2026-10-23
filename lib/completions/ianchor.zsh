@@ -14,7 +14,7 @@ _ianchor() {
     'help:Show command help'
   )
 
-  _arguments -C \
+  _arguments -C -S \
     '(-h --help)'{-h,--help}'[Show help]' \
     '(-V --version)'{-V,--version}'[Show version]' \
     '1:command:->commands' \
@@ -37,14 +37,14 @@ _ianchor() {
             '(-h --help)'{-h,--help}'[Show help]' '1:source:_files'
           ;;
         recover)
-          _arguments '--force[Overwrite existing local file]' \
+          _arguments -S '--force[Overwrite existing local file]' \
             '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'
           ;;
         relink)
-          _arguments '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'
+          _arguments -S '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'
           ;;
         remove)
-          _arguments '(-y --yes)'{-y,--yes}'[Skip confirmation]' \
+          _arguments -S '(-y --yes)'{-y,--yes}'[Skip confirmation]' \
             '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'
           ;;
         help)
@@ -52,7 +52,11 @@ _ianchor() {
           ;;
       esac
       if [[ "$state" == entries ]]; then
-        entries=("${(@f)$(ianchor __complete 2>/dev/null)}")
+        entries=("${(@0)$(ianchor __complete 2>/dev/null)}")
+        # Leading hyphens are arguments only after an explicit option terminator.
+        if (( ! ${words[(I)--]} )); then
+          entries=("${(@)entries:#-*}")
+        fi
         _wanted entries expl 'tracked entry' compadd -a entries
       fi
       ;;

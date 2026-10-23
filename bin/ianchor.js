@@ -220,9 +220,9 @@ program
       const icloudBase = getICloudDrivePath();
       const configDir = getConfigDir(icloudBase);
       db = openDb(configDir, { readonly: true });
-      const entries = getAllEntries(db);
-      for (const entry of entries) {
-        console.log(entry.name);
+      for (const entry of getAllEntries(db)) {
+        if (/[\0\n\r]/.test(entry.name)) continue;
+        process.stdout.write(`${entry.name}\0`);
       }
     } catch {
       // Silently fail during completion
