@@ -1,6 +1,7 @@
 package anchor
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -389,27 +390,39 @@ func mustFailSafelyNamed(t *testing.T, w *world, source, name string) error {
 
 func checkSafeFailure(t *testing.T, before, after string, err error) {
 	t.Helper()
+	// Compare whole snapshot lines, not just file contents: a file that came
+	// back with the same bytes but a different mode, or a file that moved, is
+	// still a lost original.
 	remaining := map[string]int{}
-	for _, line := range strings.Split(after, "\n") {
+	for _, line := range snapshotLines(after) {
 		if strings.HasPrefix(line, "F ") {
-			remaining[line[strings.LastIndex(line, " ")+1:]]++
+			remaining[line]++
 		}
 	}
-	for _, line := range strings.Split(before, "\n") {
+	afterLines := snapshotLines(after)
+	for _, line := range snapshotLines(before) {
 		if !strings.HasPrefix(line, "F ") {
 			continue
 		}
-		content := line[strings.LastIndex(line, " ")+1:]
-		if remaining[content] == 0 {
-			t.Fatalf("failed add lost file content %q:\n--- before ---\n%s\n--- after ---\n%s", content, before, after)
+		if remaining[line] == 0 {
+			// The original may be parked at a staging path, but only if its
+			// mode and bytes survived and the error tells the operator where
+			// it went.
+			if !displacedAndNamed(line, afterLines, err) {
+				t.Fatalf("failed add lost original file %q:\n--- before ---\n%s\n--- after ---\n%s", line, before, after)
+			}
+			continue
 		}
-		remaining[content]--
+		remaining[line]--
 	}
-	// A residue is allowed only when it is either a backup/disposable staging
-	// path, or the error names it. Reporting "rollback failed" is not a licence
-	// to leave unexplained files behind: the operator needs the exact location.
+	// A residue is allowed only when it is a disclosed leftover (the error says
+	// the rollback failed) at a backup or staging path, or when the error names
+	// it exactly. Reporting "rollback failed" is not a licence to leave
+	// unexplained files behind: the operator needs the exact location.
+	disclosed := err != nil && strings.Contains(err.Error(), "rollback failed")
 	for _, line := range diffSnapshot(before, after) {
-		if strings.Contains(line, "/.bak") || strings.Contains(line, ".ianchor-tmp-") {
+		isStaging := strings.Contains(line, "/.bak") || strings.Contains(line, ".ianchor-tmp-")
+		if isStaging && disclosed {
 			continue
 		}
 		if namesResidue(line, err) {
@@ -417,6 +430,22 @@ func checkSafeFailure(t *testing.T, before, after string, err error) {
 		}
 		t.Fatalf("failed operation left unreported residue %q: %v", line, err)
 	}
+}
+
+// displacedAndNamed reports whether the original described by want survives as
+// one of the after lines with the same mode and bytes, and the error names that
+// line's path.
+func displacedAndNamed(want string, afterLines []string, err error) bool {
+	tail := "mode=" + strings.SplitN(want, "mode=", 2)[1]
+	for _, line := range afterLines {
+		if !strings.HasPrefix(line, "F ") || !strings.HasSuffix(line, tail) {
+			continue
+		}
+		if namesResidue(line, err) {
+			return true
+		}
+	}
+	return false
 }
 
 // namesResidue reports whether the error text identifies this snapshot line's
@@ -485,4 +514,36 @@ func addErr(t *testing.T, w *world, source string, force bool) error {
 		t.Fatal("expected an error")
 	}
 	return err
+}
+
+// The safe-failure invariant is the substitute for a human checking every
+// injected failure by hand, so the invariant itself is tested: a file that came
+// back with different permissions is damage, and a staged original only counts
+// as preserved when the error names where it went.
+func TestSafeFailureInvariantDetectsModeOnlyDamage(t *testing.T) {
+	before := "D home mode=0755\nF home/item mode=0644 cloud\n"
+	modeOnly := "D home mode=0755\nF home/item mode=0600 cloud\n"
+	// A permission change shows up as one removed and one added snapshot line,
+	// so the diff must be non-empty even though the bytes are unchanged.
+	if diff := diffSnapshot(before, modeOnly); len(diff) != 2 {
+		t.Fatalf("mode-only damage diff = %v, want the changed line", diff)
+	}
+	if displacedAndNamed("F home/item mode=0644 cloud", snapshotLines(modeOnly), errors.New("moved")) {
+		t.Fatal("a file with the wrong mode must not count as preserved")
+	}
+
+	staged := "D home mode=0755\nF home/.ianchor-tmp-x-item-stop mode=0644 cloud\n"
+	if displacedAndNamed("F home/item mode=0644 cloud", snapshotLines(staged), errors.New("staging failed")) {
+		t.Fatal("a staged original must not count as preserved when the error does not name it")
+	}
+	if !displacedAndNamed("F home/item mode=0644 cloud", snapshotLines(staged), errors.New("staging failed at /home/.ianchor-tmp-x-item-stop")) {
+		t.Fatal("a staged original with matching mode and bytes must count as preserved when named")
+	}
+
+	if namesResidue("F /home/.ianchor-tmp-x-item-stop mode=0644 cloud", errors.New("left at /home/.ianchor-tmp-x-item-stop")) != true {
+		t.Fatal("namesResidue must match the exact path")
+	}
+	if namesResidue("F /home/item mode=0644 cloud", errors.New("left at /home/other")) {
+		t.Fatal("namesResidue must not match an unrelated path")
+	}
 }
