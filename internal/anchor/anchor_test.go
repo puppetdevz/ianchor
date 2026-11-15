@@ -6,9 +6,13 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/puppetdevz/ianchor/internal/store"
 )
+
+// sqliteTime is the layout SQLite's datetime('now') produces.
+const sqliteTime = "2006-01-02 15:04:05"
 
 // Test discovery and idempotency using the complete filter list from the Node
 // baseline, with an existing row that must not be rewritten.
@@ -383,8 +387,27 @@ func TestForceTakeoverPreservesUnrelatedOldOriginal(t *testing.T) {
 				assertSymlink(t, old, target)
 			}
 			after := f.mustEntry("entry")
-			if after.ID != before.ID || after.CreatedAt == nil || before.CreatedAt == nil || *after.CreatedAt != *before.CreatedAt || after.UpdatedAt == nil || *after.UpdatedAt == "" || after.Type != "directory" || after.Status != "linked" || after.OriginalPath == nil || *after.OriginalPath != newSource {
+			if after.ID != before.ID || after.CreatedAt == nil || before.CreatedAt == nil || *after.CreatedAt != *before.CreatedAt || after.Type != "directory" || after.Status != "linked" || after.OriginalPath == nil || *after.OriginalPath != newSource {
 				t.Fatalf("unexpected row: before=%+v after=%+v", before, after)
+			}
+			// Both columns come from SQLite datetime('now'), so a takeover that
+			// merely copied a non-empty string would still pass an emptiness
+			// check. Parse them in the store's format and require a sane order,
+			// and require the takeover to have stamped an update at or after the
+			// moment the row was created.
+			created, err := time.Parse(sqliteTime, *before.CreatedAt)
+			if err != nil {
+				t.Fatalf("created_at %q: %v", *before.CreatedAt, err)
+			}
+			updated, err := time.Parse(sqliteTime, *after.UpdatedAt)
+			if err != nil {
+				t.Fatalf("updated_at %q: %v", *after.UpdatedAt, err)
+			}
+			if updated.Before(created) {
+				t.Fatalf("updated_at %s is before created_at %s", updated, created)
+			}
+			if latest := time.Now().Add(2 * time.Second); updated.After(latest) {
+				t.Fatalf("updated_at %s is in the future", updated)
 			}
 			assertSymlink(t, newSource, filepath.Join(f.configDir, "entry"))
 		})

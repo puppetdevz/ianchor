@@ -23,7 +23,9 @@ functions="$(mktemp "${TMPDIR:-/tmp}/ianchor-cover-func.XXXXXX")"
 trap 'rm -f "$functions"' EXIT
 go tool cover -func="$profile" >"$functions"
 
-uncovered_functions="$(awk 'NR > 1 && $NF != "100.0%"' "$functions")"
+# `go tool cover -func` prints no header line, so the first line is a real
+# function and must be checked as well.
+uncovered_functions="$(awk '$NF != "100.0%"' "$functions")"
 if [ -n "$uncovered_functions" ]; then
   echo "functions below 100.0% statement coverage:" >&2
   echo "$uncovered_functions" >&2
