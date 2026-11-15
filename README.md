@@ -59,7 +59,7 @@ Go 重写版以兼容 Node 版命令、输出、退出码、补全脚本和数�
 
 工作流用 Ruby 语法树读取元数据，不执行 tap 代码；只接受单个 `Ianchor < Formula` 类中的静态、无条件、直接 DSL 声明。动态/间接调用、条件元数据及不支持的类级结构会在发布前拒绝；维护者应核实实际版本后整理为静态声明再重跑，不要通过移除版本校验绕过。Release 查询失败只输出脱敏分类及修复指引，不回显原始错误。
 
-同一版本/内容重跑不重复创建 Release 或提交，旧版本不得覆盖更高版本。同版本重跑可将 tap 恢复为该标签模板的渲染结果；标签创建后的模板修复需随新版本发布，不移动旧标签。Release 已创建而 tap 推送失败时保留 Release；修复权限/网络或远端竞争后可重跑同一标签。CI 用 `go vet`、`go test`、`go test -race` 和 darwin/amd64、darwin/arm64 交叉构建验证源码，但不代表两个架构都已在实机验证。本地测试要求所有含语句的包保持 100% 语句覆盖（`go test -coverprofile=... ./...`），覆盖分支的注入点默认调用真实实现。Formula 在临时目录中完成 init/add/list/recover 往返，只写入临时目录，不触碰真实 iCloud 数据。
+同一版本/内容重跑不重复创建 Release 或提交，旧版本不得覆盖更高版本。同版本重跑可将 tap 恢复为该标签模板的渲染结果；标签创建后的模板修复需随新版本发布，不移动旧标签。Release 已创建而 tap 推送失败时保留 Release；修复权限/网络或远端竞争后可重跑同一标签。CI 用 `go vet`、`go test`、`go test -race` 和 darwin/amd64、darwin/arm64 交叉构建验证源码，但不代表两个架构都已在实机验证。本地测试要求所有含语句的包保持 100% 语句覆盖，门禁为 `./scripts/coverage-check.sh <coverprofile>`：它按函数逐项要求 100.0%，并按整数统计要求零条未覆盖语句，因此 `go tool cover -func` 四舍五入后的总计无法掩盖缺口。覆盖错误分支的注入点默认调用真实实现。Formula 在临时目录中完成 init/add/list/recover 往返，只写入临时目录，不触碰真实 iCloud 数据。
 
 ## 使用
 
