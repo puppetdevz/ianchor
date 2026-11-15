@@ -405,24 +405,56 @@ func checkSafeFailure(t *testing.T, before, after string, err error) {
 		}
 		remaining[content]--
 	}
-	if strings.Contains(err.Error(), "rollback failed") {
-		return
-	}
+	// A residue is allowed only when it is either a backup/disposable staging
+	// path, or the error names it. Reporting "rollback failed" is not a licence
+	// to leave unexplained files behind: the operator needs the exact location.
 	for _, line := range diffSnapshot(before, after) {
 		if strings.Contains(line, "/.bak") || strings.Contains(line, ".ianchor-tmp-") {
 			continue
 		}
-		t.Fatalf("failed add left unreported residue %q: %v", line, err)
+		if namesResidue(line, err) {
+			continue
+		}
+		t.Fatalf("failed operation left unreported residue %q: %v", line, err)
 	}
+}
+
+// namesResidue reports whether the error text identifies this snapshot line's
+// path, so a partial recovery points the operator at the real location.
+func namesResidue(line string, err error) bool {
+	if err == nil {
+		return false
+	}
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return false
+	}
+	path := fields[1]
+	if _, _, ok := strings.Cut(path, " -> "); ok {
+		path, _, _ = strings.Cut(path, " -> ")
+	}
+	return strings.Contains(err.Error(), path)
+}
+
+// snapshotLines splits a joined snapshot and drops empty records: an empty
+// snapshot must not contribute a phantom residue line.
+func snapshotLines(snapshot string) []string {
+	var lines []string
+	for _, line := range strings.Split(snapshot, "\n") {
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func diffSnapshot(before, after string) []string {
 	counts := map[string]int{}
-	for _, line := range strings.Split(before, "\n") {
+	for _, line := range snapshotLines(before) {
 		counts["-"+line]++
 	}
 	var diff []string
-	for _, line := range strings.Split(after, "\n") {
+	for _, line := range snapshotLines(after) {
 		if counts["-"+line] > 0 {
 			counts["-"+line]--
 			continue
