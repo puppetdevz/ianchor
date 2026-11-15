@@ -1,5 +1,7 @@
 # Anchor - iCloud Config File Sync Tool
 
+> Historical design only. The Node.js implementation and some database and recovery details below have been superseded. See `docs/2026-1114-0054_Go全量重写与兼容迁移GoalLoop实施方案.md`, the current implementation, and the README for the active contract.
+
 ## Overview
 
 Anchor is a Node.js CLI tool that maintains a directory in iCloud Drive for syncing application config files across machines. It moves config files/directories into iCloud, creates symlinks at the original locations pointing back to iCloud (using absolute paths), and tracks the relationships in a SQLite database.

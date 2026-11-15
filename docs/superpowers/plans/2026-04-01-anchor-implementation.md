@@ -1,5 +1,7 @@
 # Anchor CLI Implementation Plan
 
+> Historical Node.js implementation plan, superseded by the Go rewrite. Do not execute these tasks against the current repository. For the current contract see `docs/2026-1114-0054_Go全量重写与兼容迁移GoalLoop实施方案.md`, the implementation, and the README.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a Node.js CLI tool that syncs config files to iCloud Drive via symlinks, installable via Homebrew.

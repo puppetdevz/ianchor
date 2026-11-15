@@ -1,0 +1,39 @@
+name: Checks
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -l . | tee /tmp/gofmt.out
+          test -z "$(cat /tmp/gofmt.out)"
+
+      - name: Vet and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          go vet ./...
+          GOTOOLCHAIN=local CGO_ENABLED=0 go test -count=1 -coverprofile=/tmp/cover.out ./...
+          coverage="$(go tool cover -func=/tmp/cover.out | tail -1 | awk '{print $3}')"
+          test "$coverage" = "100.0%" || { echo "statement coverage is $coverage, want 100.0%"; exit 1; }
+          CGO_ENABLED=1 go test -race -count=1 ./...

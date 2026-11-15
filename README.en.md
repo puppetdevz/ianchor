@@ -8,6 +8,8 @@ Sync your config files to iCloud Drive via symlinks. Share dotfiles and app conf
 
 iAnchor moves config files/directories into an iCloud Drive directory, then creates symlinks at the original locations. iCloud syncs the files, and symlinks ensure your apps still find their configs.
 
+For cross-volume moves, content, directory structure, symlink targets, and ordinary permissions are checked before the original is deleted; a copy or check failure retains the original. ACLs, extended attributes, hard-link relationships and other hidden metadata are not guaranteed to be preserved. Local verification does not mean iCloud has uploaded the data. Back up important files separately and avoid modifying them during the move; the program cannot prevent writes through already-open file handles after verification. If original cleanup fails after commit, the move is already effective and the retained original reported in the error may be partially deleted.
+
 ## Install
 
 Requires macOS, enabled iCloud Drive, and Homebrew.
@@ -19,7 +21,7 @@ brew install puppetdevz/tap/ianchor
 
 This personal tap is hosted at [puppetdevz/homebrew-tap](https://github.com/puppetdevz/homebrew-tap).
 
-The Formula declares only `node` as a direct dependency and binds the launcher to Homebrew Node, independent of nvm or other PATH settings. `better-sqlite3` requires a prebuilt binary matching that Node ABI, macOS and architecture. Download/load failures stop installation: there is no source-compilation fallback or extra Python declaration. Node may still have transitive dependencies, and installation requires network access. A Homebrew Node ABI upgrade can invalidate an already-installed native module; reinstall to fetch a matching prebuild. If none exists, report the error rather than compiling from source.
+The Formula builds the Go program from source and declares `go` only as a build dependency. Nothing is needed at runtime beyond the binary: no Node, no nvm or PATH setup, and no native modules. SQLite is compiled in through the pure-Go `modernc.org/sqlite` driver, so there is no Node ABI or Python requirement. The build downloads Go modules and uses Homebrew's `go`; macOS 13 or newer on Apple Silicon and Intel is supported.
 
 ## Upgrade
 
@@ -45,15 +47,19 @@ If your old tap was `puppetdevz/puppetdevz` or `puppetdevz/ianchor`, replace the
 
 Migration only changes the Homebrew installation source. The command remains `ianchor`, installed under `$(brew --prefix)/Cellar/ianchor/<version>`. Uninstalling the program does not delete the iCloud sync directory, tracking database, or `~/.config/ianchor.json`. There is no need to run `recover` or initialize again.
 
+### Upgrade from the Node implementation
+
+The Go rewrite targets compatibility with the Node version's commands, output, exit codes, completion scripts, and data layout. Approved safety differences apply to cases such as unsafe names, dangling symlinks, and special files. When `recover` encounters a symlink to an unrelated existing object, it refuses by default and replaces it only with `--force`. The sync directory, `ianchor.db` schema, `.bak` backups and `~/.config/ianchor.json` are unchanged, so existing installations keep working in place with no `recover`, re-`init`, or data migration. If an old `ianchor.db-wal`/`-shm` pair is left in the sync directory, the Go build opens and manages it as before.
+
 ## Release maintenance
 
-The source repository's `Formula/ianchor.rb` is the authoritative placeholder template, not a directly installable Formula. A stable `vMAJOR.MINOR.PATCH` tag must match `package.json`. Actions renders the template from that tagged commit with the source archive SHA256 and syncs the complete Formula to the tap's `main`. Keep installation changes in the source template, not in tap-only edits. Prerelease tags are rejected.
+The source repository's `Formula/ianchor.rb` is the authoritative placeholder template, not a directly installable Formula. A stable `vMAJOR.MINOR.PATCH` tag must match the `VERSION` file. Actions renders the template from that tagged commit with the source archive SHA256 and syncs the complete Formula to the tap's `main`. Keep installation changes in the source template, not in tap-only edits. Prerelease tags are rejected, and tags are immutable: existing tags are never deleted or moved, so template fixes require a new version.
 
-Before the first release, prepare an existing `puppetdevz/homebrew-tap` repository with at least one commit on `main`, and configure `HOMEBREW_TAP_TOKEN` in the source repository with permission to push directly to that branch. For a fine-grained PAT, include `puppetdevz/homebrew-tap` in the authorized repositories and grant Contents read/write permission; update the secret if the old token only covered the old repository. Missing `Formula/` directories or the target Formula are created automatically; the workflow does not create repositories or change branch protection. Maintainers must explicitly invoke the release process; do not move old tags to adopt a new workflow.
+Before the first release, configure and verify server-side protection against deleting or force-updating released tags. The script's repeated checks are not an atomic lock and cannot prevent an external concurrent tag move. Also prepare an existing `puppetdevz/homebrew-tap` repository with at least one commit on `main`, and configure `HOMEBREW_TAP_TOKEN` in the source repository with permission to push directly to that branch. For a fine-grained PAT, include `puppetdevz/homebrew-tap` in the authorized repositories and grant Contents read/write permission; update the secret if the old token only covered the old repository. Missing `Formula/` directories or the target Formula are created automatically; the workflow does not create repositories or change branch protection. Maintainers must explicitly invoke the release process; do not move old tags to adopt a new workflow.
 
 The workflow reads metadata through Ruby's syntax tree without executing tap code. It accepts static, unconditional, direct DSL declarations within a single `Ianchor < Formula` class. Dynamic/indirect calls, conditional metadata and unsupported class-level structures are rejected before publishing. Verify the actual version and normalize those declarations before rerunning; do not bypass version checks. Release query failures report sanitized categories and recovery guidance, never raw error output.
 
-Identical reruns create no duplicate Release or commit, and older versions cannot overwrite newer ones. Same-version reruns can restore the tap Formula to the rendered template from that tag. Template fixes committed after tagging require a new version; do not move existing tags. If tap push fails after Release creation, the Release is retained: fix permissions/network or resolve concurrent changes, then rerun the same tag. CI validates the lockfile with that run's Homebrew Node, not every future ABI or Mac architecture. Formula tests exercise SQLite only in temporary directories and never initialize real iCloud data.
+Identical reruns create no duplicate Release or commit, and older versions cannot overwrite newer ones. Same-version reruns can restore the tap Formula to the rendered template from that tag. Template fixes committed after tagging require a new version; do not move existing tags. If tap push fails after Release creation, the Release is retained: fix permissions/network or resolve concurrent changes, then rerun the same tag. CI verifies the sources with `go vet`, `go test`, `go test -race`, and darwin/amd64 plus darwin/arm64 cross-builds; it does not prove both architectures were exercised on real hardware. Local testing expects 100% statement coverage for every package that has statements (`go test -coverprofile=... ./...`); the injection seams used to reach error branches default to the real implementations. The Formula test runs an init/add/list/recover roundtrip inside temporary directories and never touches real iCloud data.
 
 ## Usage
 
@@ -91,7 +97,7 @@ ianchor list --json
 
 Restore a file or directory to its original location on this device only, replacing the symlink with an independent local copy. The iCloud file and database entry are preserved, so other devices keep working. Local edits no longer sync after recovery. `ianchor list` shows the local entry as `unlinked`; use `ianchor relink <name>` to rejoin syncing.
 
-Cloud contents are backed up to `<sync-directory>/.bak/<name>` before recovery, replacing any previous backup of the same name. `--force` deletes an existing local file or directory at the original path; this backup preserves cloud contents, not the overwritten local contents. Entries without an original path are rejected without deleting cloud data.
+Cloud contents are backed up to `<sync-directory>/.bak/<name>` before recovery, replacing any previous backup of the same name. Before committing, recovery compares the local copy with the backup's contents, directory structure, ordinary permissions and link targets; a mismatch aborts and attempts rollback. During copying and comparison, new copies may temporarily gain owner access, with final ordinary modes restored after verification; a process crash can leave temporary copies with wider owner permissions. Recovery does not guarantee ACL preservation. If final permissions prevent the current user from reading a copy or reading and searching a directory, recovery aborts and attempts rollback; the unforced conflict branch also refuses to retain an inaccessible new backup. This check is not an atomic snapshot and cannot prevent later concurrent changes. `--force` deletes an existing local file or directory at the original path; this backup preserves cloud contents, not the overwritten local contents. Entries without an original path are rejected without deleting cloud data.
 
 ```bash
 ianchor recover zshrc
@@ -153,4 +159,4 @@ If `_ianchor: function definition file not found` persists after an upgrade, fir
 
 ## License
 
-`package.json` declares the MIT license; this repository does not yet include the `LICENSE` text.
+This project is MIT licensed; the repository does not yet include the `LICENSE` text.

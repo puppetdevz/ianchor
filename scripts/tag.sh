@@ -3,9 +3,23 @@ set -euo pipefail
 
 # Usage: ./scripts/tag.sh [patch|minor|major]
 # Default: patch
+#
+# VERSION is the single source of truth for the release version. Tags are
+# immutable: an existing tag is never deleted or moved.
 
 BUMP="${1:-patch}"
-CURRENT=$(node -p "require('./package.json').version")
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+case "$BUMP" in
+  patch|minor|major) ;;
+  *)
+    echo "Error: expected patch, minor or major (got: ${BUMP})"
+    exit 1
+    ;;
+esac
+
+CURRENT=$(tr -d '[:space:]' < VERSION)
 
 # Ensure we're on main
 BRANCH=$(git branch --show-current)
@@ -20,25 +34,26 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-# Bump version
-npm version "$BUMP" --no-git-tag-version > /dev/null
-VERSION=$(node -p "require('./package.json').version")
+IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
+case "$BUMP" in
+  major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+  minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+  patch) PATCH=$((PATCH + 1)) ;;
+esac
+VERSION="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${VERSION}"
 
-echo "==> ${CURRENT} -> ${VERSION} (${BUMP})"
-
-# Commit version bump
-git add package.json package-lock.json
-git commit -m "chore: bump version to ${TAG}"
-
-# Delete old tag if exists
-if git tag -l | grep -q "^${TAG}$"; then
-  echo "==> Removing old tag ${TAG}..."
-  git tag -d "$TAG"
-  git push origin ":refs/tags/${TAG}" 2>/dev/null || true
+if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then
+  echo "Error: tag ${TAG} already exists. Tags are immutable; bump to a new version instead."
+  exit 1
 fi
 
-# Push code, create and push tag
+echo "==> ${CURRENT} -> ${VERSION} (${BUMP})"
+printf '%s\n' "$VERSION" > VERSION
+
+git add VERSION
+git commit -m "chore: bump version to ${TAG}"
+
 echo "==> Pushing to origin..."
 git push origin main
 

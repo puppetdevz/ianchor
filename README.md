@@ -8,6 +8,8 @@
 
 iAnchor 将配置文件/目录移动到 iCloud Drive 中的指定目录，然后在原始位置创建符号链接。iCloud 负责同步文件，符号链接确保应用程序仍能找到配置。
 
+跨磁盘迁移会在删除原件前校验内容、目录结构、符号链接目标和普通权限；失败时保留原件。ACL、扩展属性、硬链接关系和其他隐藏元数据不保证保留；本地校验也不代表 iCloud 上传完成。涉及重要文件时，请另外备份，并避免迁移期间修改文件；程序无法阻止已有文件句柄在校验后继续写入。提交后清理原件失败时，迁移已生效，报错中的残留原件也可能已被部分删除。
+
 ## 安装
 
 需要 macOS、已启用的 iCloud Drive 和 Homebrew。
@@ -19,7 +21,7 @@ brew install puppetdevz/tap/ianchor
 
 此个人 tap 对应仓库 [puppetdevz/homebrew-tap](https://github.com/puppetdevz/homebrew-tap)。
 
-Formula 仅声明 `node` 为直接依赖，入口绑定 Homebrew Node，不受 nvm 等 PATH 配置影响。`better-sqlite3` 必须有匹配该 Node ABI、macOS 和架构的预编译包；下载或加载失败会中止安装，不回退源码编译，也不要求额外声明 Python。Node 自身仍可能有传递依赖，安装需要联网。Homebrew Node 跨 ABI 升级后，旧原生模块可能失效，可重新安装以获取匹配产物；没有产物时请报告错误，不要尝试源码编译。
+Formula 从源码构建 Go 程序，`go` 仅作为构建依赖，运行时不需要 Node，也不受 nvm 等 PATH 配置影响。SQLite 由纯 Go 实现（`modernc.org/sqlite`）静态编译进二进制，安装后没有原生模块、Node ABI 或 Python 依赖。构建阶段需要联网下载 Go 模块并使用 Homebrew 的 `go`；支持 macOS 13 及以上的 Apple Silicon 与 Intel。
 
 ## 升级
 
@@ -45,15 +47,19 @@ brew install puppetdevz/tap/ianchor
 
 迁移只更换 Homebrew 安装来源，命令仍为 `ianchor`，安装仍位于 `$(brew --prefix)/Cellar/ianchor/<版本>`。卸载程序不会删除 iCloud 同步目录、追踪数据库或 `~/.config/ianchor.json`，无需先执行 `recover` 或重新初始化。
 
+### 从 Node 实现升级
+
+Go 重写版以兼容 Node 版命令、输出、退出码、补全脚本和数据布局为目标；危险名称、悬空链接和特殊文件等安全场景存在经批准的行为差异；`recover` 遇到指向其他现存对象的软链接时默认拒绝，需 `--force` 才替换。同步目录、`ianchor.db` 结构、`.bak` 备份、`~/.config/ianchor.json` 均未改变，原地即可继续使用，不需要 `recover`、重新 `init` 或迁移数据。升级后首次运行时若同步目录里存在旧版本留下的 `ianchor.db-wal`/`-shm` 文件，Go 版会照常读取并自行管理它们。
+
 ## 发布维护
 
-源码仓库的 `Formula/ianchor.rb` 是带占位符的权威模板，不能直接安装。稳定版 `vMAJOR.MINOR.PATCH` 标签必须与 `package.json` 版本一致；Actions 使用该标签提交中的模板和源码归档 SHA256，将完整 Formula 同步到 tap 的 `main`，不在 tap 单独维护安装逻辑。预发布标签会被拒绝。
+源码仓库的 `Formula/ianchor.rb` 是带占位符的权威模板，不能直接安装。稳定版 `vMAJOR.MINOR.PATCH` 标签必须与 `VERSION` 文件一致；Actions 使用该标签提交中的模板和源码归档 SHA256，将完整 Formula 同步到 tap 的 `main`，不在 tap 单独维护安装逻辑。预发布标签会被拒绝。标签不可移动：已存在的标签不会被删除或重指，修模板须发新版本。
 
-首次发布前，维护者需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-tap`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。若使用 fine-grained PAT，需将 `puppetdevz/homebrew-tap` 纳入授权仓库并授予 Contents 读写权限；旧 token 若只授权旧仓库，必须更新该 secret。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
+首次发布前，维护者应配置并核实源码仓库对已发布标签的服务端保护（禁止删除或强制更新）；脚本的多次检查并非原子锁，不能单独保证标签不被外部并发移动。还需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-tap`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。若使用 fine-grained PAT，需将 `puppetdevz/homebrew-tap` 纳入授权仓库并授予 Contents 读写权限；旧 token 若只授权旧仓库，必须更新该 secret。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
 
 工作流用 Ruby 语法树读取元数据，不执行 tap 代码；只接受单个 `Ianchor < Formula` 类中的静态、无条件、直接 DSL 声明。动态/间接调用、条件元数据及不支持的类级结构会在发布前拒绝；维护者应核实实际版本后整理为静态声明再重跑，不要通过移除版本校验绕过。Release 查询失败只输出脱敏分类及修复指引，不回显原始错误。
 
-同一版本/内容重跑不重复创建 Release 或提交，旧版本不得覆盖更高版本。同版本重跑可将 tap 恢复为该标签模板的渲染结果；标签创建后的模板修复需随新版本发布，不移动旧标签。Release 已创建而 tap 推送失败时保留 Release；修复权限/网络或远端竞争后可重跑同一标签。CI 使用当次 Homebrew Node 和锁文件验证，不保证未来所有 Node ABI 都有 SQLite 预编译产物，也不代表所有 Mac 架构都已实机验证。Formula 测试只在临时目录读写 SQLite，不执行真实 iCloud 初始化。
+同一版本/内容重跑不重复创建 Release 或提交，旧版本不得覆盖更高版本。同版本重跑可将 tap 恢复为该标签模板的渲染结果；标签创建后的模板修复需随新版本发布，不移动旧标签。Release 已创建而 tap 推送失败时保留 Release；修复权限/网络或远端竞争后可重跑同一标签。CI 用 `go vet`、`go test`、`go test -race` 和 darwin/amd64、darwin/arm64 交叉构建验证源码，但不代表两个架构都已在实机验证。本地测试要求所有含语句的包保持 100% 语句覆盖（`go test -coverprofile=... ./...`），覆盖分支的注入点默认调用真实实现。Formula 在临时目录中完成 init/add/list/recover 往返，只写入临时目录，不触碰真实 iCloud 数据。
 
 ## 使用
 
@@ -91,7 +97,7 @@ ianchor list --json
 
 仅在当前设备上将 iCloud 中的文件或目录拷贝回原始位置，替换符号链接为独立的本地副本。保留云端文件及数据库记录，其他设备的链接不受影响。恢复后本机的修改不再同步，`ianchor list` 会显示为 `unlinked`，可用 `ianchor relink <name>` 重新加入同步。
 
-恢复前会备份云端内容到 `<同步目录>/.bak/<name>`，替换同名旧备份。`--force` 会删除原位置已有的本地文件或目录；此处备份的是云端内容，不是被覆盖的本地内容。若条目缺少原始路径，则报错且保留云端数据。
+恢复前会备份云端内容到 `<同步目录>/.bak/<name>`，替换同名旧备份。提交前会比较恢复副本和备份的内容、目录结构、普通权限及链接目标；若不一致则中止并尝试回滚。复制与比较期间，新副本可能暂时增加所有者访问权限，校验后恢复最终普通权限；进程崩溃可能留下权限较宽的临时副本。恢复不保证保留 ACL；若最终权限使当前用户无法读取副本或读取并搜索目录，会中止并尝试回滚；未使用 `--force` 的冲突分支也不会保留不可访问的新备份。此检查不是原子快照，无法阻止检查后发生的并发修改。`--force` 会删除原位置已有的本地文件或目录；此处备份的是云端内容，不是被覆盖的本地内容。若条目缺少原始路径，则报错且保留云端数据。
 
 ```bash
 ianchor recover zshrc
@@ -153,4 +159,4 @@ source <(ianchor completion bash)
 
 ## License
 
-`package.json` 声明使用 MIT 许可证；当前仓库尚未附带 `LICENSE` 正文。
+本项目使用 MIT 许可证；当前仓库尚未附带 `LICENSE` 正文。

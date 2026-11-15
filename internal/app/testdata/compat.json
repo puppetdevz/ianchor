@@ -1,0 +1,1270 @@
+{
+ "cases": [
+  {
+   "args": [],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n"
+   }
+  },
+  {
+   "args": [
+    "--help"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "-h"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "-V"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "1.1.1\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "--version"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "1.1.1\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "-v"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '-v'\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--version"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "1.1.1\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "-Vh"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "1.1.1\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "-hV"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '-hV'\n"
+   }
+  },
+  {
+   "args": [
+    "--version",
+    "--wat"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "1.1.1\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "--help",
+    "--wat"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "init"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor init [options]\n\nInitialize ianchor: create iCloud config directory and database\n\nOptions:\n  --dir <name>  config directory name in iCloud Drive\n  -h, --help    display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "init",
+    "--help"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor init [options]\n\nInitialize ianchor: create iCloud config directory and database\n\nOptions:\n  --dir <name>  config directory name in iCloud Drive\n  -h, --help    display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor list [options]\n\nList all tracked config files\n\nOptions:\n  --json      output as JSON\n  -h, --help  display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "add"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor add [options] <source>\n\nAdd a file or directory to iCloud and create a symlink\n\nOptions:\n  --name <name>  custom name in iCloud directory\n  --force        overwrite if already exists (default: false)\n  -h, --help     display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "recover"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor recover [options] <name>\n\nRestore a local copy without deleting the iCloud file or tracking entry\n\nOptions:\n  --force     overwrite if file exists at original location (default: false)\n  -h, --help  display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "relink"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor relink [options] <name>\n\nRe-create symlink for an unlinked file in iCloud\n\nOptions:\n  -h, --help  display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "remove"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor remove [options] <name>\n\nRemove an entry from the database and delete the file from iCloud\n\nOptions:\n  -y, --yes   skip confirmation (default: false)\n  -h, --help  display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "completion"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor completion [options] [shell]\n\nOutput shell completion script\n\nArguments:\n  shell       shell type: zsh or bash (default: \"zsh\")\n\nOptions:\n  -h, --help  display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "__complete"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor __complete [options]\n\nOptions:\n  -h, --help  display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "wat"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n"
+   }
+  },
+  {
+   "args": [
+    "help",
+    "help"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n"
+   }
+  },
+  {
+   "args": [
+    "help",
+    "list",
+    "extra"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor list [options]\n\nList all tracked config files\n\nOptions:\n  --json      output as JSON\n  -h, --help  display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "help",
+    "-h"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Usage: ianchor [options] [command]\n\nSync config files to iCloud Drive via symlinks\n\nOptions:\n  -V, --version             output the version number\n  -h, --help                display help for command\n\nCommands:\n  init [options]            Initialize ianchor: create iCloud config directory\n                            and database\n  list [options]            List all tracked config files\n  add [options] <source>    Add a file or directory to iCloud and create a\n                            symlink\n  recover [options] <name>  Restore a local copy without deleting the iCloud\n                            file or tracking entry\n  relink <name>             Re-create symlink for an unlinked file in iCloud\n  remove [options] <name>   Remove an entry from the database and delete the\n                            file from iCloud\n  help [command]            display help for command\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "wat"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown command 'wat'\n"
+   }
+  },
+  {
+   "args": [
+    "wat",
+    "x"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown command 'wat'\n"
+   }
+  },
+  {
+   "args": [
+    "lis"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown command 'lis'\n(Did you mean list?)\n"
+   }
+  },
+  {
+   "args": [
+    "lisst"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown command 'lisst'\n(Did you mean list?)\n"
+   }
+  },
+  {
+   "args": [
+    "inti"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown command 'inti'\n(Did you mean init?)\n"
+   }
+  },
+  {
+   "args": [
+    "add"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: missing required argument 'source'\n"
+   }
+  },
+  {
+   "args": [
+    "recover"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: missing required argument 'name'\n"
+   }
+  },
+  {
+   "args": [
+    "relink"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: missing required argument 'name'\n"
+   }
+  },
+  {
+   "args": [
+    "remove"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: missing required argument 'name'\n"
+   }
+  },
+  {
+   "args": [
+    "init",
+    "extra",
+    "--dir",
+    "x"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: too many arguments for 'init'. Expected 0 arguments but got 1.\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "extra"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: too many arguments for 'list'. Expected 0 arguments but got 1.\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--",
+    "--json"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: too many arguments for 'list'. Expected 0 arguments but got 1.\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "a",
+    "b"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: too many arguments for 'add'. Expected 1 argument but got 2.\n"
+   }
+  },
+  {
+   "args": [
+    "completion",
+    "bash",
+    "extra"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: too many arguments for 'completion'. Expected 1 argument but got 2.\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--wat"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--wat'\n"
+   }
+  },
+  {
+   "args": [
+    "--wat"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--wat'\n"
+   }
+  },
+  {
+   "args": [
+    "-x"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '-x'\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--jsn"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--jsn'\n(Did you mean --json?)\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "--forc",
+    "x"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--forc'\n(Did you mean --force?)\n"
+   }
+  },
+  {
+   "args": [
+    "recover",
+    "--forc",
+    "x"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--forc'\n(Did you mean --force?)\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "--name"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: option '--name <name>' argument missing\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "x",
+    "--name"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: option '--name <name>' argument missing\n"
+   }
+  },
+  {
+   "args": [
+    "init",
+    "--dir"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: option '--dir <name>' argument missing\n"
+   }
+  },
+  {
+   "args": [
+    "completion",
+    "fish"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Unsupported shell: fish. Expected zsh or bash.\n"
+   }
+  },
+  {
+   "args": [
+    "completion"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "#compdef ianchor\n\n_ianchor() {\n  local context state state_descr line\n  local -A opt_args\n  local -a commands entries expl\n  commands=(\n    'init:Initialize ianchor'\n    'list:List all tracked config files'\n    'add:Add a file or directory to iCloud'\n    'recover:Restore a local copy while preserving iCloud data'\n    'relink:Re-create a symlink for a tracked entry'\n    'remove:Delete an entry and its iCloud copy'\n    'help:Show command help'\n  )\n\n  _arguments -C -S \\\n    '(-h --help)'{-h,--help}'[Show help]' \\\n    '(-V --version)'{-V,--version}'[Show version]' \\\n    '1:command:->commands' \\\n    '*::argument:->arguments'\n\n  case \"$state\" in\n    commands)\n      _describe -t commands 'ianchor command' commands\n      ;;\n    arguments)\n      case \"$words[1]\" in\n        init)\n          _arguments '--dir[iCloud config directory name]:directory name:' '(-h --help)'{-h,--help}'[Show help]'\n          ;;\n        list)\n          _arguments '--json[Output JSON]' '(-h --help)'{-h,--help}'[Show help]'\n          ;;\n        add)\n          _arguments '--name[Custom entry name]:entry name:' '--force[Overwrite existing file]' \\\n            '(-h --help)'{-h,--help}'[Show help]' '1:source:_files'\n          ;;\n        recover)\n          _arguments -S '--force[Overwrite existing local file]' \\\n            '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'\n          ;;\n        relink)\n          _arguments -S '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'\n          ;;\n        remove)\n          _arguments -S '(-y --yes)'{-y,--yes}'[Skip confirmation]' \\\n            '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'\n          ;;\n        help)\n          _describe -t commands 'ianchor command' commands\n          ;;\n      esac\n      if [[ \"$state\" == entries ]]; then\n        entries=(\"${(@0)$(ianchor __complete 2>/dev/null)}\")\n        # Leading hyphens are arguments only after an explicit option terminator.\n        if (( ! ${words[(I)--]} )); then\n          entries=(\"${(@)entries:#-*}\")\n        fi\n        _wanted entries expl 'tracked entry' compadd -a entries\n      fi\n      ;;\n  esac\n}\n\n# An autoloaded function must complete now; sourcing/eval must only register it.\nif [[ \"${funcstack[1]}\" == _ianchor ]]; then\n  _ianchor \"$@\"\nelse\n  compdef _ianchor ianchor\nfi\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "completion",
+    "bash"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "# Bash 3.2+ completion; source this file to register ianchor.\n_ianchor_quote_replies() {\n  local i candidate quoted suffix\n  for ((i=0; i<${#COMPREPLY[@]}; i++)); do\n    candidate=\"${COMPREPLY[i]}\"\n    suffix=' '\n    if [[ \"$1\" == add && -d \"$candidate\" ]]; then\n      candidate=\"${candidate%/}/\"\n      suffix=''\n    fi\n    # Readline replaces only the suffix following its last colon word break.\n    candidate=\"${candidate#\"$2\"}\"\n    printf -v quoted '%q' \"$candidate\"\n    COMPREPLY[i]=\"$quoted$suffix\"\n  done\n}\n\n_ianchor_complete() {\n  local cur command candidate options i first char decoded='' trim=''\n  local positional=0 end_options=0\n  COMPREPLY=()\n  cur=\"${COMP_WORDS[COMP_CWORD]}\"\n  command=\"${COMP_WORDS[1]}\"\n  first=$COMP_CWORD\n\n  # Reassemble colon-separated COMP_WORDS without changing COMP_WORDBREAKS.\n  if [[ \"$COMP_WORDBREAKS\" == *:* ]]; then\n    while [[ $first -gt 2 ]]; do\n      if [[ \"${COMP_WORDS[first-1]}\" == : || \"${COMP_WORDS[first]}\" == : ]]; then\n        ((first-=1))\n        cur=\"${COMP_WORDS[first]}$cur\"\n      else\n        break\n      fi\n    done\n  fi\n  # Undo literal backslash escaping from an earlier completion, never eval it.\n  for ((i=0; i<${#cur}; i++)); do\n    char=\"${cur:i:1}\"\n    if [[ \"$char\" == \\\\ && $((i+1)) -lt ${#cur} ]]; then\n      ((i+=1))\n      char=\"${cur:i:1}\"\n    elif [[ \"$char\" == : && \"$COMP_WORDBREAKS\" == *:* ]]; then\n      # An escaped colon belongs to the word; only a real break is trimmed.\n      trim=\"$decoded:\"\n    fi\n    decoded+=\"$char\"\n  done\n  cur=$decoded\n\n  if [[ $COMP_CWORD -eq 1 ]]; then\n    options='init list add recover relink remove help'\n    [[ \"$cur\" == -* ]] && options='-h --help -V --version'\n  else\n    # Skip flags and option values when locating the single positional argument.\n    for ((i=2; i<first; i++)); do\n      if [[ $end_options -eq 1 ]]; then\n        ((positional+=1))\n        continue\n      fi\n      case \"${COMP_WORDS[i]}\" in\n        --) end_options=1 ;;\n        --name|--dir)\n          [[ $i -eq $((first-1)) ]] && return 0\n          ((i+=1))\n          ;;\n        --name=*|--dir=*|-*) ;;\n        *) ((positional+=1)) ;;\n      esac\n    done\n    if [[ \"$cur\" == -* && $end_options -eq 0 ]]; then\n      options='-h --help'\n      case \"$command\" in\n        init) options+=' --dir' ;;\n        list) options+=' --json' ;;\n        add) options+=' --name --force' ;;\n        recover) options+=' --force' ;;\n        remove) options+=' --yes -y' ;;\n      esac\n    elif [[ $positional -eq 0 ]]; then\n      case \"$command\" in\n        recover|relink|remove)\n          while IFS= read -r -d '' candidate; do\n            # A hyphen name needs an explicit -- so Commander sees an argument.\n            [[ \"$candidate\" == -* && $end_options -eq 0 ]] && continue\n            [[ -n \"$candidate\" && \"$candidate\" == \"$cur\"* ]] && COMPREPLY[${#COMPREPLY[@]}]=\"$candidate\"\n          done < <(ianchor __complete 2>/dev/null)\n          ;;\n        add)\n          while IFS= read -r candidate; do\n            COMPREPLY[${#COMPREPLY[@]}]=\"$candidate\"\n          done < <(compgen -f -- \"$cur\")\n          ;;\n        help) options='init list add recover relink remove help' ;;\n      esac\n    fi\n  fi\n  if [[ -n \"$options\" ]]; then\n    while IFS= read -r candidate; do\n      COMPREPLY[${#COMPREPLY[@]}]=\"$candidate\"\n    done < <(compgen -W \"$options\" -- \"$cur\")\n  fi\n  _ianchor_quote_replies \"$command\" \"$trim\"\n  return 0\n}\n# Quote names ourselves: filenames mode incorrectly adds '/' to entry names\n# that happen to match local directories. Append spaces only to complete words.\ncomplete -o nospace -F _ianchor_complete ianchor\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "completion",
+    "zsh"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "#compdef ianchor\n\n_ianchor() {\n  local context state state_descr line\n  local -A opt_args\n  local -a commands entries expl\n  commands=(\n    'init:Initialize ianchor'\n    'list:List all tracked config files'\n    'add:Add a file or directory to iCloud'\n    'recover:Restore a local copy while preserving iCloud data'\n    'relink:Re-create a symlink for a tracked entry'\n    'remove:Delete an entry and its iCloud copy'\n    'help:Show command help'\n  )\n\n  _arguments -C -S \\\n    '(-h --help)'{-h,--help}'[Show help]' \\\n    '(-V --version)'{-V,--version}'[Show version]' \\\n    '1:command:->commands' \\\n    '*::argument:->arguments'\n\n  case \"$state\" in\n    commands)\n      _describe -t commands 'ianchor command' commands\n      ;;\n    arguments)\n      case \"$words[1]\" in\n        init)\n          _arguments '--dir[iCloud config directory name]:directory name:' '(-h --help)'{-h,--help}'[Show help]'\n          ;;\n        list)\n          _arguments '--json[Output JSON]' '(-h --help)'{-h,--help}'[Show help]'\n          ;;\n        add)\n          _arguments '--name[Custom entry name]:entry name:' '--force[Overwrite existing file]' \\\n            '(-h --help)'{-h,--help}'[Show help]' '1:source:_files'\n          ;;\n        recover)\n          _arguments -S '--force[Overwrite existing local file]' \\\n            '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'\n          ;;\n        relink)\n          _arguments -S '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'\n          ;;\n        remove)\n          _arguments -S '(-y --yes)'{-y,--yes}'[Skip confirmation]' \\\n            '(-h --help)'{-h,--help}'[Show help]' '1:entry:->entries'\n          ;;\n        help)\n          _describe -t commands 'ianchor command' commands\n          ;;\n      esac\n      if [[ \"$state\" == entries ]]; then\n        entries=(\"${(@0)$(ianchor __complete 2>/dev/null)}\")\n        # Leading hyphens are arguments only after an explicit option terminator.\n        if (( ! ${words[(I)--]} )); then\n          entries=(\"${(@)entries:#-*}\")\n        fi\n        _wanted entries expl 'tracked entry' compadd -a entries\n      fi\n      ;;\n  esac\n}\n\n# An autoloaded function must complete now; sourcing/eval must only register it.\nif [[ \"${funcstack[1]}\" == _ianchor ]]; then\n  _ianchor \"$@\"\nelse\n  compdef _ianchor ianchor\nfi\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "__complete"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--json"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Cannot open database because the directory does not exist\n"
+   }
+  },
+  {
+   "args": [
+    "relink",
+    "--force",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--force'\n"
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "-n",
+    "x"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '-n'\n"
+   }
+  },
+  {
+   "args": [
+    "--",
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Cannot open database because the directory does not exist\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "--",
+    "--weird"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Cannot open database because the directory does not exist\n"
+   }
+  },
+  {
+   "args": [
+    "init",
+    "--dir",
+    ""
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "iCloud config directory name (default: ianchor): ",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "-y",
+    "-y",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Cannot open database because the directory does not exist\n"
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "--yes",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Cannot open database because the directory does not exist\n"
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "--yes=true",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--yes=true'\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--json=true"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--json=true'\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "--name=x",
+    "src"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Cannot open database because the directory does not exist\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "--name",
+    "a",
+    "--name",
+    "b",
+    "src"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Cannot open database because the directory does not exist\n"
+   }
+  },
+  {
+   "args": [
+    "--json",
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: unknown option '--json'\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    "--force"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "error: missing required argument 'source'\n"
+   }
+  }
+ ],
+ "steps": [
+  {
+   "args": [
+    "init"
+   ],
+   "stdin": "\n",
+   "expect": {
+    "code": 0,
+    "stdout": "iCloud config directory name (default: ianchor): iAnchor initialized!\nConfig directory: <HOME>/Library/Mobile Documents/com~apple~CloudDocs/ianchor\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "No entries found. Use \"ianchor add <path>\" to add config files.\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--json"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "[]\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "init",
+    "--dir",
+    "other"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "iAnchor initialized!\nConfig directory: <HOME>/Library/Mobile Documents/com~apple~CloudDocs/other\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "No entries found. Use \"ianchor add <path>\" to add config files.\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "init",
+    "--dir",
+    "ianchor"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "iAnchor initialized!\nConfig directory: <HOME>/Library/Mobile Documents/com~apple~CloudDocs/ianchor\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "add",
+    ".zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Added \"zshrc\" to iCloud.\n  /private<HOME>/.zshrc -> <HOME>/Library/Mobile Documents/com~apple~CloudDocs/ianchor/zshrc\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "\u001b[90m┌───────\u001b[39m\u001b[90m┬────────────────────────────────────\u001b[39m\u001b[90m┬──────\u001b[39m\u001b[90m┬────────┐\u001b[39m\n\u001b[90m│\u001b[39m\u001b[31m Name  \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Original Path                      \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Type \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Status \u001b[39m\u001b[90m│\u001b[39m\n\u001b[90m├───────\u001b[39m\u001b[90m┼────────────────────────────────────\u001b[39m\u001b[90m┼──────\u001b[39m\u001b[90m┼────────┤\u001b[39m\n\u001b[90m│\u001b[39m zshrc \u001b[90m│\u001b[39m /private<HOME>/.zshrc \u001b[90m│\u001b[39m file \u001b[90m│\u001b[39m linked \u001b[90m│\u001b[39m\n\u001b[90m└───────\u001b[39m\u001b[90m┴────────────────────────────────────\u001b[39m\u001b[90m┴──────\u001b[39m\u001b[90m┴────────┘\u001b[39m\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "add",
+    ".ssh"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Added \"ssh\" to iCloud.\n  /private<HOME>/.ssh -> <HOME>/Library/Mobile Documents/com~apple~CloudDocs/ianchor/ssh\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "add",
+    ".zshrc"
+   ],
+   "stdin": "abc\n",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Source \"/private<HOME>/.zshrc\" is already a symlink.\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    ".zshrc"
+   ],
+   "stdin": "\n",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Source \"/private<HOME>/.zshrc\" is already a symlink.\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--json"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "[\n  {\n    \"id\": 2,\n    \"name\": \"ssh\",\n    \"original_path\": \"/private<HOME>/.ssh\",\n    \"type\": \"directory\",\n    \"status\": \"linked\",\n    \"created_at\": \"<TS>\",\n    \"updated_at\": \"<TS>\"\n  },\n  {\n    \"id\": 1,\n    \"name\": \"zshrc\",\n    \"original_path\": \"/private<HOME>/.zshrc\",\n    \"type\": \"file\",\n    \"status\": \"linked\",\n    \"created_at\": \"<TS>\",\n    \"updated_at\": \"<TS>\"\n  }\n]\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "recover",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Recovered \"zshrc\" locally.\niCloud file and tracking entry preserved; other devices can keep using them.\n  Restored to: /private<HOME>/.zshrc\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "\u001b[90m┌───────\u001b[39m\u001b[90m┬────────────────────────────────────\u001b[39m\u001b[90m┬───────────\u001b[39m\u001b[90m┬──────────┐\u001b[39m\n\u001b[90m│\u001b[39m\u001b[31m Name  \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Original Path                      \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Type      \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Status   \u001b[39m\u001b[90m│\u001b[39m\n\u001b[90m├───────\u001b[39m\u001b[90m┼────────────────────────────────────\u001b[39m\u001b[90m┼───────────\u001b[39m\u001b[90m┼──────────┤\u001b[39m\n\u001b[90m│\u001b[39m ssh   \u001b[90m│\u001b[39m /private<HOME>/.ssh   \u001b[90m│\u001b[39m directory \u001b[90m│\u001b[39m linked   \u001b[90m│\u001b[39m\n\u001b[90m├───────\u001b[39m\u001b[90m┼────────────────────────────────────\u001b[39m\u001b[90m┼───────────\u001b[39m\u001b[90m┼──────────┤\u001b[39m\n\u001b[90m│\u001b[39m zshrc \u001b[90m│\u001b[39m /private<HOME>/.zshrc \u001b[90m│\u001b[39m file      \u001b[90m│\u001b[39m unlinked \u001b[90m│\u001b[39m\n\u001b[90m└───────\u001b[39m\u001b[90m┴────────────────────────────────────\u001b[39m\u001b[90m┴───────────\u001b[39m\u001b[90m┴──────────┘\u001b[39m\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "recover",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: File already exists at original path \"/private<HOME>/.zshrc\". Use --force to overwrite.\n"
+   }
+  },
+  {
+   "args": [
+    "recover",
+    "--force",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Recovered \"zshrc\" locally.\niCloud file and tracking entry preserved; other devices can keep using them.\n  Restored to: /private<HOME>/.zshrc\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "relink",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "Relinked \"zshrc\".\n  /private<HOME>/.zshrc -> <HOME>/Library/Mobile Documents/com~apple~CloudDocs/ianchor/zshrc\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "relink",
+    "zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: \"zshrc\" is already linked.\n"
+   }
+  },
+  {
+   "args": [
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "\u001b[90m┌───────\u001b[39m\u001b[90m┬────────────────────────────────────\u001b[39m\u001b[90m┬───────────\u001b[39m\u001b[90m┬────────┐\u001b[39m\n\u001b[90m│\u001b[39m\u001b[31m Name  \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Original Path                      \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Type      \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Status \u001b[39m\u001b[90m│\u001b[39m\n\u001b[90m├───────\u001b[39m\u001b[90m┼────────────────────────────────────\u001b[39m\u001b[90m┼───────────\u001b[39m\u001b[90m┼────────┤\u001b[39m\n\u001b[90m│\u001b[39m ssh   \u001b[90m│\u001b[39m /private<HOME>/.ssh   \u001b[90m│\u001b[39m directory \u001b[90m│\u001b[39m linked \u001b[90m│\u001b[39m\n\u001b[90m├───────\u001b[39m\u001b[90m┼────────────────────────────────────\u001b[39m\u001b[90m┼───────────\u001b[39m\u001b[90m┼────────┤\u001b[39m\n\u001b[90m│\u001b[39m zshrc \u001b[90m│\u001b[39m /private<HOME>/.zshrc \u001b[90m│\u001b[39m file      \u001b[90m│\u001b[39m linked \u001b[90m│\u001b[39m\n\u001b[90m└───────\u001b[39m\u001b[90m┴────────────────────────────────────\u001b[39m\u001b[90m┴───────────\u001b[39m\u001b[90m┴────────┘\u001b[39m\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "-y",
+    "abc_zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Entry \"abc_zshrc\" not found.\n"
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "zshrc"
+   ],
+   "stdin": "n\n",
+   "expect": {
+    "code": 0,
+    "stdout": "Remove \"zshrc\"? This will delete the file from iCloud and the database record. [y/N] Cancelled.\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "zshrc"
+   ],
+   "stdin": "yes\n",
+   "expect": {
+    "code": 0,
+    "stdout": "Remove \"zshrc\"? This will delete the file from iCloud and the database record. [y/N] Cancelled.\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "zshrc"
+   ],
+   "stdin": "y\n",
+   "expect": {
+    "code": 0,
+    "stdout": "Remove \"zshrc\"? This will delete the file from iCloud and the database record. [y/N] Removed \"zshrc\".\n  Original path was: /private<HOME>/.zshrc\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "list"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "\u001b[90m┌──────\u001b[39m\u001b[90m┬──────────────────────────────────\u001b[39m\u001b[90m┬───────────\u001b[39m\u001b[90m┬────────┐\u001b[39m\n\u001b[90m│\u001b[39m\u001b[31m Name \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Original Path                    \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Type      \u001b[39m\u001b[90m│\u001b[39m\u001b[31m Status \u001b[39m\u001b[90m│\u001b[39m\n\u001b[90m├──────\u001b[39m\u001b[90m┼──────────────────────────────────\u001b[39m\u001b[90m┼───────────\u001b[39m\u001b[90m┼────────┤\u001b[39m\n\u001b[90m│\u001b[39m ssh  \u001b[90m│\u001b[39m /private<HOME>/.ssh \u001b[90m│\u001b[39m directory \u001b[90m│\u001b[39m linked \u001b[90m│\u001b[39m\n\u001b[90m└──────\u001b[39m\u001b[90m┴──────────────────────────────────\u001b[39m\u001b[90m┴───────────\u001b[39m\u001b[90m┴────────┘\u001b[39m\n",
+    "stderr": ""
+   }
+  },
+  {
+   "args": [
+    "add",
+    "nope.txt"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Source \"/private<HOME>/nope.txt\" does not exist.\n"
+   }
+  },
+  {
+   "args": [
+    "add",
+    ".zshrc"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Source \"/private<HOME>/.zshrc\" does not exist.\n"
+   }
+  },
+  {
+   "args": [
+    "relink",
+    "ghost"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Entry \"ghost\" not found.\n"
+   }
+  },
+  {
+   "args": [
+    "recover",
+    "ghost"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Entry \"ghost\" not found.\n"
+   }
+  },
+  {
+   "args": [
+    "remove",
+    "-y",
+    "ghost"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 1,
+    "stdout": "",
+    "stderr": "Error: Entry \"ghost\" not found.\n"
+   }
+  },
+  {
+   "args": [
+    "list",
+    "--json"
+   ],
+   "stdin": "",
+   "expect": {
+    "code": 0,
+    "stdout": "[\n  {\n    \"id\": 2,\n    \"name\": \"ssh\",\n    \"original_path\": \"/private<HOME>/.ssh\",\n    \"type\": \"directory\",\n    \"status\": \"linked\",\n    \"created_at\": \"<TS>\",\n    \"updated_at\": \"<TS>\"\n  }\n]\n",
+    "stderr": ""
+   }
+  }
+ ],
+ "fixtures": {
+  "initFixtures": true,
+  "final": {
+   "tree": [
+    {
+     "type": "F",
+     "path": ".DS_Store",
+     "sha256": "ef875a1705a5fdac206be996f4dc1f726ea6b68861eb741c37def7277f179e37",
+     "size": 4
+    },
+    {
+     "type": "D",
+     "path": ".config"
+    },
+    {
+     "type": "F",
+     "path": ".config/ianchor.json",
+     "sha256": "cd614323b6164202246cedc5c66432c8bbb909c52a625e146cf4706004263a8a",
+     "size": 27
+    },
+    {
+     "type": "L",
+     "path": ".ssh",
+     "target": "<HOME>/Library/Mobile Documents/com~apple~CloudDocs/ianchor/ssh"
+    },
+    {
+     "type": "F",
+     "path": ".zshrc.bak",
+     "sha256": "d68f397bd54d134ddad1b8a07194fde393eb5cd6630827d6143404269f8fba80",
+     "size": 4
+    },
+    {
+     "type": "D",
+     "path": "Library"
+    },
+    {
+     "type": "D",
+     "path": "Library/Mobile Documents"
+    },
+    {
+     "type": "D",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs"
+    },
+    {
+     "type": "D",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/ianchor"
+    },
+    {
+     "type": "D",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/ianchor/.bak"
+    },
+    {
+     "type": "F",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/ianchor/.bak/zshrc",
+     "sha256": "d68f397bd54d134ddad1b8a07194fde393eb5cd6630827d6143404269f8fba80",
+     "size": 4
+    },
+    {
+     "type": "F",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/ianchor/ianchor.db",
+     "sha256": "<DB>",
+     "size": -1
+    },
+    {
+     "type": "D",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/ianchor/ssh"
+    },
+    {
+     "type": "F",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/ianchor/ssh/config",
+     "sha256": "f019feb3e520622efe7b429ad193a0ca090892027c6f4f42acb59871adb9a4bf",
+     "size": 7
+    },
+    {
+     "type": "D",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/other"
+    },
+    {
+     "type": "F",
+     "path": "Library/Mobile Documents/com~apple~CloudDocs/other/ianchor.db",
+     "sha256": "<DB>",
+     "size": -1
+    },
+    {
+     "type": "F",
+     "path": "logo.png",
+     "sha256": "8f8cbb7dcf46e0bc7d53265749a6c17d116093a6ba95e442764060c76fd4a86c",
+     "size": 3
+    }
+   ],
+   "rows": [
+    {
+     "id": 2,
+     "name": "ssh",
+     "original_path": "/private<HOME>/.ssh",
+     "type": "directory",
+     "status": "linked",
+     "created_at": "<TS>",
+     "updated_at": "<TS>"
+    }
+   ]
+  }
+ }
+}
