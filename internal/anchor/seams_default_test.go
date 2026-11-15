@@ -19,17 +19,22 @@ func seamAddress(fn any) uintptr { return reflect.ValueOf(fn).Pointer() }
 // shipped behaviour.
 func TestSeamsDefaultToRealCalls(t *testing.T) {
 	direct := map[string][2]uintptr{
-		"evalSymlinksPath": {seamAddress(evalSymlinksPath), seamAddress(filepath.EvalSymlinks)},
-		"lstatPath":        {seamAddress(lstatPath), seamAddress(os.Lstat)},
-		"statPath":         {seamAddress(statPath), seamAddress(os.Stat)},
-		"readlinkPath":     {seamAddress(readlinkPath), seamAddress(os.Readlink)},
-		"openPath":         {seamAddress(openPath), seamAddress(os.Open)},
-		"readDirPath":      {seamAddress(readDirPath), seamAddress(os.ReadDir)},
-		"mkdirPath":        {seamAddress(mkdirPath), seamAddress(os.Mkdir)},
-		"stagingPath":      {seamAddress(stagingPath), seamAddress(fsx.StagingPath)},
-		"openRootPath":     {seamAddress(openRootPath), seamAddress(os.OpenRoot)},
-		"copyHash":         {seamAddress(copyHash), seamAddress(io.Copy)},
-		"absPath":          {seamAddress(absPath), seamAddress(filepath.Abs)},
+		"evalSymlinksPath":           {seamAddress(evalSymlinksPath), seamAddress(filepath.EvalSymlinks)},
+		"lstatPath":                  {seamAddress(lstatPath), seamAddress(os.Lstat)},
+		"statPath":                   {seamAddress(statPath), seamAddress(os.Stat)},
+		"readlinkPath":               {seamAddress(readlinkPath), seamAddress(os.Readlink)},
+		"openPath":                   {seamAddress(openPath), seamAddress(os.Open)},
+		"readDirPath":                {seamAddress(readDirPath), seamAddress(os.ReadDir)},
+		"mkdirPath":                  {seamAddress(mkdirPath), seamAddress(os.Mkdir)},
+		"stagingPath":                {seamAddress(stagingPath), seamAddress(fsx.StagingPath)},
+		"openRootPath":               {seamAddress(openRootPath), seamAddress(os.OpenRoot)},
+		"copyHash":                   {seamAddress(copyHash), seamAddress(io.Copy)},
+		"absPath":                    {seamAddress(absPath), seamAddress(filepath.Abs)},
+		"copyIntoBackup":             {seamAddress(copyIntoBackup), seamAddress(fsx.CopyIntoRoot)},
+		"copyNodeModesIntoBackup":    {seamAddress(copyNodeModesIntoBackup), seamAddress(fsx.CopyNodePreserveModesIntoRoot)},
+		"copyNodeImpl":               {seamAddress(copyNodeImpl), seamAddress(copyNodeWithIdentity)},
+		"makeCopiedTreeWritableHook": {seamAddress(makeCopiedTreeWritableHook), seamAddress(makeCopiedTreeWritable)},
+		"renameAt":                   {seamAddress(renameAt), seamAddress(renameAtExclusive)},
 	}
 	for name, pair := range direct {
 		if pair[0] != pair[1] {
@@ -109,5 +114,77 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 	}
 	if err := unix.Unlinkat(int(handleDir.Fd()), "missing", 0); err == nil {
 		t.Error("direct unlinkat unexpectedly succeeded")
+	}
+
+	// Remaining root-relative seams must act on the root, not be no-ops.
+	if err := rootMkdir(root, "made-dir", 0o750); err != nil {
+		t.Errorf("rootMkdir: %v", err)
+	} else if info, statErr := os.Stat(filepath.Join(dir, "made-dir")); statErr != nil || info.Mode().Perm() != 0o750 {
+		t.Errorf("rootMkdir created %v, %v", info, statErr)
+	}
+	createdFile, err := rootOpenFile(root, "opened-file", os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Errorf("rootOpenFile: %v", err)
+	} else {
+		createdFile.Close()
+	}
+	if err := os.Symlink("probe", filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if target, err := rootReadlink(root, "link"); err != nil || target != "probe" {
+		t.Errorf("rootReadlink = %q, %v", target, err)
+	}
+	if err := rootRemove(root, "opened-file"); err != nil {
+		t.Errorf("rootRemove: %v", err)
+	} else if _, statErr := os.Stat(filepath.Join(dir, "opened-file")); statErr == nil {
+		t.Error("rootRemove did not remove the entry")
+	}
+
+	if entries, err := readDirFile(handleDir, -1); err != nil || len(entries) == 0 {
+		t.Errorf("readDirFile = %d entries, %v", len(entries), err)
+	}
+	if err := chmodFile(handle, 0o640); err != nil {
+		t.Errorf("chmodFile: %v", err)
+	} else if info, statErr := handle.Stat(); statErr != nil || info.Mode().Perm() != 0o640 {
+		t.Errorf("chmodFile left mode %v, %v", info.Mode().Perm(), statErr)
+	}
+
+	// renameDirect and dbAllEntries are closures, so only behaviour proves
+	// they still do the real work.
+	from := filepath.Join(dir, "rename-from")
+	if err := os.WriteFile(from, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	to := filepath.Join(dir, "rename-to")
+	if err := renameDirect(from, to); err != nil {
+		t.Errorf("renameDirect: %v", err)
+	} else if _, statErr := os.Stat(to); statErr != nil {
+		t.Errorf("renameDirect did not move the entry: %v", statErr)
+	}
+
+	// manifestRestore / manifestVerify must really drive the manifest.
+	manifest := &fsx.PermissionManifest{}
+	manifestDir := filepath.Join(dir, "manifest")
+	if err := os.Mkdir(manifestDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	mRoot, err := os.OpenRoot(manifestDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mRoot.Close()
+	manifestFile, err := mRoot.OpenFile("node", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manifest.Record("node", manifestFile, 0o600); err != nil {
+		t.Fatalf("manifest.Record: %v", err)
+	}
+	manifestFile.Close()
+	if err := manifestRestore(manifest, mRoot); err != nil {
+		t.Errorf("manifestRestore: %v", err)
+	}
+	if err := manifestVerify(manifest, mRoot); err != nil {
+		t.Errorf("manifestVerify: %v", err)
 	}
 }

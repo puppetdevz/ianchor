@@ -90,4 +90,70 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 	if err != nil || len(entries) != 1 || entries[0].Name() != "probe" {
 		t.Errorf("readSearchDir = %v, %v", entries, err)
 	}
+
+	// The root-relative openers must really open through the root, not return
+	// a nil handle that the caller never notices.
+	openSeams := map[string]func(*os.Root, string) (*os.File, error){
+		"openChildDot":         openChildDot,
+		"openSourceDot":        openSourceDot,
+		"openSourceParentDot":  openSourceParentDot,
+		"openRegularParentDot": openRegularParentDot,
+	}
+	for name, seam := range openSeams {
+		handle, err := seam(root, "probe")
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		opened, statErr := handle.Stat()
+		handle.Close()
+		if statErr != nil || !os.SameFile(opened, want) {
+			t.Errorf("%s opened something else: %v", name, statErr)
+		}
+	}
+	childRoots := map[string]func(*os.Root, string) (*os.Root, error){
+		"openChildRoot":        openChildRoot,
+		"openSourceRootNested": openSourceRootNested,
+	}
+	for name, seam := range childRoots {
+		childRoot, err := seam(root, ".")
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		probe, statErr := childRoot.Lstat("probe")
+		childRoot.Close()
+		if statErr != nil || !os.SameFile(probe, want) {
+			t.Errorf("%s did not resolve through the root: %v", name, statErr)
+		}
+	}
+
+	// manifestOpen creates inside the root; it must not silently drop the
+	// flags or the permissions.
+	created, err := manifestOpen(root, "manifest-probe", os.O_CREATE|os.O_WRONLY, 0o640)
+	if err != nil {
+		t.Errorf("manifestOpen: %v", err)
+	} else {
+		created.Close()
+		if info, statErr := os.Stat(filepath.Join(dir, "manifest-probe")); statErr != nil || info.Mode().Perm() != 0o640 {
+			t.Errorf("manifestOpen created %v, %v", info, statErr)
+		}
+	}
+
+	chmodSeams := map[string]func(*os.File, os.FileMode) error{
+		"chmodPinnedTemporary":  chmodPinnedTemporary,
+		"chmodPinnedFinal":      chmodPinnedFinal,
+		"chmodCreatedFileFinal": chmodCreatedFileFinal,
+		"chmodPrepareRestore":   chmodPrepareRestore,
+	}
+	for name, seam := range chmodSeams {
+		if err := seam(file, 0o600); err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		info, statErr := file.Stat()
+		if statErr != nil || info.Mode().Perm() != 0o600 {
+			t.Errorf("%s did not change the handle's mode: %v", name, statErr)
+		}
+	}
 }
