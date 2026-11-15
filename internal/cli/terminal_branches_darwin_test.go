@@ -169,6 +169,16 @@ func TestProtectTerminalSignalForwardingAndInstallFailure(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("suspend did not resume")
 	}
+	// A second suspend/continue cycle must work, and a SIGCONT that arrives
+	// while nothing is suspended must not panic on a double close.
+	signals() <- syscall.SIGCONT
+	again := make(chan struct{})
+	go func() { suspend(); close(again) }()
+	select {
+	case <-again:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second suspend did not resume")
+	}
 	signals() <- syscall.SIGTERM
 	select {
 	case signal := <-forwarded:

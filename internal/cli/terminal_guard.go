@@ -38,7 +38,10 @@ func protectTerminal(fd int, onContinue func()) (cleanup func(), suspend func(),
 	closing, suspended := false, false
 	signals := make(chan os.Signal, 4)
 	done, exited := make(chan struct{}), make(chan struct{})
-	resumed := make(chan struct{})
+	// resumed is buffered rather than closed on each resume: closing it twice
+	// (two suspend/continue cycles, or a spurious SIGCONT) would panic, and the
+	// signal handler must never take the whole process down.
+	resumed := make(chan struct{}, 1)
 	watchSignals(signals)
 	go func() {
 		defer close(exited)
@@ -55,7 +58,10 @@ func protectTerminal(fd int, onContinue func()) (cleanup func(), suspend func(),
 					state.Unlock()
 					if resume {
 						onContinue()
-						close(resumed)
+						select {
+						case resumed <- struct{}{}:
+						default:
+						}
 					}
 					continue
 				}
@@ -84,6 +90,12 @@ func protectTerminal(fd int, onContinue func()) (cleanup func(), suspend func(),
 		if closing {
 			state.Unlock()
 			return
+		}
+		// Drop a stale wake-up from an earlier cycle so the wait below can only
+		// be satisfied by the SIGCONT that follows this suspend.
+		select {
+		case <-resumed:
+		default:
 		}
 		suspended = true
 		_ = setTerminalMode(fd, unix.TIOCSETA, original)
