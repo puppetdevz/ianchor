@@ -52,6 +52,18 @@ func recoverErr(t *testing.T, f *recoverFixture, force bool) error {
 	return err
 }
 
+// recoverFailSafely requires a reported error plus a safe outcome: the iCloud
+// copy still exists and no local content was silently dropped outside the
+// hidden backup directory. A seam that also breaks compensation must say
+// "rollback failed" for the assertion to accept the residue.
+func recoverFailSafely(t *testing.T, f *recoverFixture, force bool) error {
+	t.Helper()
+	before := f.world.snapshot()
+	err := recoverErr(t, f, force)
+	checkSafeFailure(t, before, f.world.snapshot(), err)
+	return err
+}
+
 func TestRecoverEarlyFailures(t *testing.T) {
 	requireUnprivileged(t)
 	t.Run("entry lookup", func(t *testing.T) {
@@ -82,7 +94,7 @@ func TestRecoverEarlyFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("cloud stat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -93,7 +105,7 @@ func TestRecoverEarlyFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("original parent stat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -108,7 +120,7 @@ func TestRecoverEarlyFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), "permission denied")
+		mustContain(t, recoverFailSafely(t, f, false), "permission denied")
 	})
 	t.Run("dangling local symlink stat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -125,7 +137,7 @@ func TestRecoverEarlyFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), "permission denied")
+		mustContain(t, recoverFailSafely(t, f, false), "permission denied")
 	})
 	t.Run("local lstat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -136,7 +148,7 @@ func TestRecoverEarlyFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), "permission denied")
+		mustContain(t, recoverFailSafely(t, f, false), "permission denied")
 	})
 	t.Run("backup root", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -144,7 +156,7 @@ func TestRecoverEarlyFailures(t *testing.T) {
 			t.Fatal(err)
 		}
 		override(t, &rootMkdir, func(*os.Root, string, os.FileMode) error { return errSeam })
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 }
 
@@ -162,7 +174,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), "iCloud source was replaced")
+		mustContain(t, recoverFailSafely(t, f, false), "iCloud source was replaced")
 	})
 	t.Run("linked original lstat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -177,12 +189,12 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("linked original readlink", func(t *testing.T) {
 		f := newRecoverFixture(t)
 		override(t, &readlinkPath, func(string) (string, error) { return "", errSeam })
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("unrelated link stat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -199,7 +211,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, true), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, true), errSeam.Error())
 	})
 	t.Run("original lstat failure", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -209,7 +221,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 		writeFile(t, f.local, "local edit\n")
 		realLstat := lstatPath
 		override(t, &lstatPath, failingAt(t, "recover.go", 77, realLstat))
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("linked original stat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -232,7 +244,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, true), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, true), errSeam.Error())
 	})
 	t.Run("cloud target stat", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -255,7 +267,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, true), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, true), errSeam.Error())
 	})
 	t.Run("link staging", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -266,7 +278,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realStaging(dir, ref)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("conflict detached backup", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -285,7 +297,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("conflict restore backup", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -294,7 +306,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 		}
 		writeFile(t, f.local, "local edit\n")
 		override(t, &manifestRestore, func(*fsxManifest, *os.Root) error { return errSeam })
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 		// Dying while refreshing the conflict backup must leave the local
 		// edit, the cloud link and the database row untouched.
 		assertRegularFile(t, f.local, "local edit\n")
@@ -310,7 +322,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 		}
 		writeFile(t, f.local, "local edit\n")
 		override(t, &manifestVerify, func(*fsxManifest, *os.Root) error { return errSeam })
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 		assertRegularFile(t, f.local, "local edit\n")
 		assertRegularFile(t, f.cloud, "cloud\n")
 		assertNoStagingResidue(t, f.world.localDir)
@@ -334,7 +346,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, recoverErr(t, f, true), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, true), errSeam.Error())
 	})
 	t.Run("force displaced staging", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -351,7 +363,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			}
 			return realStaging(dir, ref)
 		})
-		mustContain(t, recoverErr(t, f, true), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, true), errSeam.Error())
 	})
 	t.Run("force displaced restore refused", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -373,7 +385,7 @@ func TestRecoverPreCopyFailures(t *testing.T) {
 			return rename(from, from)
 		})
 		_ = renameDirect
-		mustContain(t, recoverErr(t, f, true), "replacement retained at")
+		mustContain(t, recoverFailSafely(t, f, true), "replacement retained at")
 	})
 }
 
@@ -414,7 +426,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 			}
 			return realEval(path)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("parent identity", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -427,7 +439,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 		}
 		realStat := statPath
 		override(t, &statPath, failingAt(t, "recover.go", 216, realStat))
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("original parent changed", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -435,7 +447,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 		// check: the pre-commit validation is the second call made from
 		// validateOriginal, which is line-shift safe unlike a caller line.
 		override(t, &evalSymlinksPath, failingInFunc(t, "validateOriginal", f.world.configDir, 2, evalSymlinksPath))
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("cloud replaced after copy", func(t *testing.T) {
 		f := forceLocal(t)
@@ -448,7 +460,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		err := recoverErr(t, f, true)
+		err := recoverFailSafely(t, f, true)
 		mustContain(t, err, "iCloud source")
 	})
 	t.Run("validate after copy", func(t *testing.T) {
@@ -462,7 +474,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 			}
 			return realEval(path)
 		})
-		mustContain(t, recoverErr(t, f, true), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, true), errSeam.Error())
 	})
 	t.Run("copy replaced", func(t *testing.T) {
 		f := forceLocal(t)
@@ -479,7 +491,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, recoverErr(t, f, true), "recovery destination was replaced")
+		mustContain(t, recoverFailSafely(t, f, true), "recovery destination was replaced")
 	})
 	t.Run("local root", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -490,7 +502,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 			}
 			return realOpen(path)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("local dir open", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -505,7 +517,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 			}
 			return realRootOpen(root, name)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("local dir replaced", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -516,7 +528,7 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 			}
 			return realStatFile(file)
 		})
-		mustContain(t, recoverErr(t, f, false), "recovery destination parent was detached")
+		mustContain(t, recoverFailSafely(t, f, false), "recovery destination parent was detached")
 	})
 }
 
@@ -544,7 +556,7 @@ func TestRecoverLateFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), errSeam.Error())
+		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("late parent detached", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -559,7 +571,7 @@ func TestRecoverLateFailures(t *testing.T) {
 			}
 			return realStat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), "recovery destination parent was detached")
+		mustContain(t, recoverFailSafely(t, f, false), "recovery destination parent was detached")
 	})
 	t.Run("late copy replaced", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -576,7 +588,7 @@ func TestRecoverLateFailures(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, recoverErr(t, f, false), "recovery destination was replaced")
+		mustContain(t, recoverFailSafely(t, f, false), "recovery destination was replaced")
 	})
 	t.Run("late backup replaced", func(t *testing.T) {
 		f := newRecoverFixture(t)
@@ -591,7 +603,7 @@ func TestRecoverLateFailures(t *testing.T) {
 			}
 			return realLstat(root, name)
 		})
-		err := recoverErr(t, f, false)
+		err := recoverFailSafely(t, f, false)
 		mustContain(t, err, "backup")
 	})
 	t.Run("local reopen parent", func(t *testing.T) {
@@ -608,7 +620,7 @@ func TestRecoverLateFailures(t *testing.T) {
 			return realOpen(path)
 		})
 		override(t, &manifestRestore, func(*fsxManifest, *os.Root) error { return errSeam })
-		err := recoverErr(t, f, false)
+		err := recoverFailSafely(t, f, false)
 		mustContain(t, err, "reopen local copy permissions")
 		// Compensation uses the same permission helper, so it cannot finish;
 		// the contract is that the copy stays in place and every unexecuted

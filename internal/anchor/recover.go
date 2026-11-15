@@ -161,7 +161,7 @@ func Recover(db *store.DB, configDir, name string, force bool) (RecoverResult, e
 			if err := root.attached(); err != nil {
 				return RecoverResult{}, j.fail(err)
 			}
-			j.add("reopen backup copy permissions", func() error { return manifestEnable(&backupModes, root.root) })
+			j.add("reopen backup copy permissions", func() error { return backupModes.EnableOwnerAccess(root.root) })
 			if err := manifestRestore(&backupModes, root.root); err != nil {
 				return RecoverResult{}, j.fail(err)
 			}
@@ -268,14 +268,14 @@ func Recover(db *store.DB, configDir, name string, force bool) (RecoverResult, e
 	}
 	compareErr := verifyPreparedSnapshots(root.root, name, &backupModes, localRoot, filepath.Base(original), &localModes)
 	if compareErr == nil {
-		j.add("reopen backup copy permissions", func() error { return manifestEnable(&backupModes, root.root) })
+		j.add("reopen backup copy permissions", func() error { return backupModes.EnableOwnerAccess(root.root) })
 		j.add("reopen local copy permissions", func() error {
 			parent, err := openRootPath(filepath.Dir(original))
 			if err != nil {
 				return err
 			}
 			defer parent.Close()
-			return manifestEnable(&localModes, parent)
+			return localModes.EnableOwnerAccess(parent)
 		})
 		compareErr = manifestRestore(&localModes, localRoot)
 		if compareErr == nil {

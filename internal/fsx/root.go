@@ -318,7 +318,7 @@ func copyOpenedFileIntoRoot(in *os.File, src string, root *os.Root, dst string, 
 		out.Close()
 		return fmt.Errorf("temporary copy mode changed: %s", dst)
 	}
-	visible, err := rootLstatVisibleCopy(root, dst)
+	visible, err := root.Lstat(dst)
 	if err != nil || !os.SameFile(info, visible) {
 		out.Close()
 		return fmt.Errorf("copy destination was detached or replaced: %s", dst)

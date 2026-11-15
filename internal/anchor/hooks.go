@@ -7,7 +7,6 @@ import (
 
 	"github.com/puppetdevz/ianchor/internal/fsx"
 	"github.com/puppetdevz/ianchor/internal/store"
-	"golang.org/x/sys/unix"
 )
 
 // Filesystem seams. Production values are the real calls, so shipping
@@ -29,9 +28,6 @@ var (
 	statFile    = func(file *os.File) (os.FileInfo, error) { return file.Stat() }
 	chmodFile   = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
 	readDirFile = func(file *os.File, n int) ([]os.DirEntry, error) { return file.ReadDir(n) }
-
-	fstatatPath  = unix.Fstatat
-	unlinkatPath = unix.Unlinkat
 
 	makeCopiedTreeWritableHook = makeCopiedTreeWritable
 
@@ -56,7 +52,6 @@ var (
 var (
 	manifestRestore = func(m *fsx.PermissionManifest, root *os.Root) error { return m.Restore(root) }
 	manifestVerify  = func(m *fsx.PermissionManifest, root *os.Root) error { return m.VerifyAccessible(root) }
-	manifestEnable  = func(m *fsx.PermissionManifest, root *os.Root) error { return m.EnableOwnerAccess(root) }
 )
 
 // renameDirect stages entries on their own volume.

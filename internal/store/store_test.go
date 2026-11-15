@@ -450,29 +450,13 @@ func nowMillis() int64 {
 
 func TestMissingAndReadonlyStoreBranches(t *testing.T) {
 	db, dir := openTemp(t)
-	missing, err := db.GetEntryByID(99)
-	if err != nil || missing != nil {
-		t.Fatalf("missing=%v err=%v", missing, err)
-	}
 	original := "/tmp/original"
-	created, updated := "2026-01-01 00:00:00", "2026-01-02 00:00:00"
-	entry := Entry{ID: 7, Name: "kept", OriginalPath: &original, Type: "file", Status: "linked", CreatedAt: &created, UpdatedAt: &updated}
-	if err := db.PutEntry(entry); err != nil {
+	if err := db.AddEntry("kept", &original, "file", "linked"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := db.GetEntryByID(7)
+	got, err := db.GetEntry("kept")
 	if err != nil || got == nil || got.Name != "kept" || *got.OriginalPath != original {
-		t.Fatalf("restored=%+v err=%v", got, err)
-	}
-	changed := "/tmp/changed"
-	entry.OriginalPath = &changed
-	entry.Status = "unlinked"
-	if err := db.RestoreFields(entry); err != nil {
-		t.Fatal(err)
-	}
-	got, err = db.GetEntry("kept")
-	if err != nil || *got.OriginalPath != changed || got.Status != "unlinked" || got.ID != 7 {
-		t.Fatalf("fields=%+v err=%v", got, err)
+		t.Fatalf("entry=%+v err=%v", got, err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
@@ -492,14 +476,12 @@ func TestMissingAndReadonlyStoreBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	closedOriginal := "/tmp/original"
-	closedEntry := Entry{ID: 9, Name: "closed", OriginalPath: &closedOriginal, Type: "file", Status: "linked"}
 	for _, call := range []func() error{
 		func() error { return closed.AddEntry("closed", &closedOriginal, "file", "linked") },
 		func() error { return closed.UpsertEntry("closed", &closedOriginal, "file", "linked") },
 		func() error { return closed.SetStatus("closed", "unlinked") },
 		func() error { return closed.SetOriginalPath("closed", &closedOriginal) },
 		func() error { return closed.DeleteEntry("closed") },
-		func() error { return closed.RestoreEntry(closedEntry) },
 	} {
 		if err := call(); err == nil {
 			t.Fatal("closed database accepted a statement")
@@ -507,9 +489,6 @@ func TestMissingAndReadonlyStoreBranches(t *testing.T) {
 	}
 	if _, err := closed.GetEntry("closed"); err == nil {
 		t.Fatal("closed database returned a row")
-	}
-	if _, err := closed.GetEntryByID(9); err == nil {
-		t.Fatal("closed database returned an id")
 	}
 	if _, err := closed.AllEntries(); err == nil {
 		t.Fatal("closed database listed rows")
@@ -612,9 +591,6 @@ func TestMissingAndReadonlyStoreBranches(t *testing.T) {
 		func() error { return readonly.SetStatus("kept", "unlinked") },
 		func() error { return readonly.SetOriginalPath("kept", &original) },
 		func() error { return readonly.DeleteEntry("kept") },
-		func() error { return readonly.PutEntry(entry) },
-		func() error { return readonly.RestoreEntry(entry) },
-		func() error { return readonly.RestoreFields(entry) },
 	} {
 		if err := call(); err == nil || !strings.Contains(err.Error(), "readonly") {
 			t.Fatalf("readonly err=%v", err)

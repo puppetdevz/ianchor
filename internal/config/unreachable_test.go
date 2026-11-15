@@ -30,11 +30,15 @@ func TestSaveWriteAndSymlinkResolutionFailures(t *testing.T) {
 		t.Fatalf("symlink loop err=%v", err)
 	}
 
+	// Every probe above "/" fails on purpose so the walk must stop at the
+	// root, the only point where parentDir(probe) == probe. The call sequence
+	// is asserted exactly: a change that keeps walking past "/" would either
+	// loop forever or silently accept an out-of-tree target.
 	originalEval := evalSymlinks
-	calls := 0
+	var probed []string
 	evalSymlinks = func(path string) (string, error) {
-		calls++
-		if calls == 1 {
+		probed = append(probed, path)
+		if path == base {
 			return base, nil
 		}
 		return "", os.ErrNotExist
@@ -43,7 +47,8 @@ func TestSaveWriteAndSymlinkResolutionFailures(t *testing.T) {
 	if err := ensureWithin(base, "/"); err != nil {
 		t.Fatalf("root walk err=%v", err)
 	}
-	if calls < 2 {
-		t.Fatalf("eval calls=%d", calls)
+	want := []string{base, "/"}
+	if strings.Join(probed, ",") != strings.Join(want, ",") {
+		t.Fatalf("probed %v, want %v", probed, want)
 	}
 }

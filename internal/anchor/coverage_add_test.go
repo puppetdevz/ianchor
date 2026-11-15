@@ -180,12 +180,12 @@ func TestAddStagingErrors(t *testing.T) {
 	t.Run("backup root", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
 		override(t, &rootMkdir, func(*os.Root, string, os.FileMode) error { return errSeam })
-		mustContain(t, addErr(t, w, source, false), errSeam.Error())
+		mustContain(t, mustFailSafely(t, w, source, false), errSeam.Error())
 	})
 	t.Run("staging", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
 		override(t, &stagingPath, func(string, string) (string, error) { return "", errSeam })
-		mustContain(t, addErr(t, w, source, false), errSeam.Error())
+		mustContain(t, mustFailSafely(t, w, source, false), errSeam.Error())
 	})
 	t.Run("source identity", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
@@ -196,7 +196,7 @@ func TestAddStagingErrors(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, addErr(t, w, source, false), errSeam.Error())
+		mustContain(t, mustFailSafely(t, w, source, false), errSeam.Error())
 	})
 	t.Run("install staging", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
@@ -212,7 +212,7 @@ func TestAddStagingErrors(t *testing.T) {
 			}
 			return realStaging(dir, ref)
 		})
-		mustContain(t, addErr(t, w, source, false), errSeam.Error())
+		mustContain(t, mustFailSafely(t, w, source, false), errSeam.Error())
 	})
 	t.Run("created link", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
@@ -224,7 +224,7 @@ func TestAddStagingErrors(t *testing.T) {
 			}
 			return info, err
 		})
-		mustContain(t, addErr(t, w, source, false), "cannot verify created symlink")
+		mustContain(t, mustFailSafely(t, w, source, false), "cannot verify created symlink")
 	})
 }
 
@@ -239,7 +239,7 @@ func TestAddCrossVolumeErrors(t *testing.T) {
 			}
 			return realStaging(dir, ref)
 		})
-		mustContain(t, addErr(t, w, source, false), errSeam.Error())
+		mustContain(t, mustFailSafely(t, w, source, false), errSeam.Error())
 	})
 	t.Run("rollback refuses overwrite", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
@@ -252,7 +252,7 @@ func TestAddCrossVolumeErrors(t *testing.T) {
 			}
 			return realCopy(dst, src)
 		})
-		mustContain(t, addErr(t, w, source, false), "refusing to overwrite new entry")
+		mustContain(t, mustFailSafely(t, w, source, false), "refusing to overwrite new entry")
 	})
 	t.Run("source stage lstat", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
@@ -264,7 +264,7 @@ func TestAddCrossVolumeErrors(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, addErr(t, w, source, false), errSeam.Error())
+		mustContain(t, mustFailSafely(t, w, source, false), errSeam.Error())
 	})
 	t.Run("source replaced", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
@@ -276,7 +276,7 @@ func TestAddCrossVolumeErrors(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, addErr(t, w, source, false), "source was replaced")
+		mustContain(t, mustFailSafely(t, w, source, false), "source was replaced")
 	})
 }
 
@@ -315,7 +315,7 @@ func TestAddForceTakeoverErrors(t *testing.T) {
 			}
 			return realLstat(path)
 		})
-		mustContain(t, addErrNamed(t, w, source, "item"), errSeam.Error())
+		mustContain(t, mustFailSafelyNamed(t, w, source, "item"), errSeam.Error())
 	})
 	t.Run("link staging", func(t *testing.T) {
 		w, source, _, _ := prepare(t)
@@ -326,7 +326,7 @@ func TestAddForceTakeoverErrors(t *testing.T) {
 			}
 			return realStaging(dir, ref)
 		})
-		mustContain(t, addErrNamed(t, w, source, "item"), errSeam.Error())
+		mustContain(t, mustFailSafelyNamed(t, w, source, "item"), errSeam.Error())
 	})
 	t.Run("link cross volume staging", func(t *testing.T) {
 		w, source, _, _ := prepare(t)
@@ -347,7 +347,7 @@ func TestAddForceTakeoverErrors(t *testing.T) {
 			}
 			return nil
 		})
-		mustContain(t, addErrNamed(t, w, source, "item"), errSeam.Error())
+		mustContain(t, mustFailSafelyNamed(t, w, source, "item"), errSeam.Error())
 	})
 	t.Run("link source rename", func(t *testing.T) {
 		w, source, link, _ := prepare(t)
@@ -362,8 +362,79 @@ func TestAddForceTakeoverErrors(t *testing.T) {
 			}
 			return nil
 		})
-		mustContain(t, addErrNamed(t, w, source, "item"), errSeam.Error())
+		mustContain(t, mustFailSafelyNamed(t, w, source, "item"), errSeam.Error())
 	})
+}
+
+// mustFailSafely runs Add and requires a reported error plus a safe outcome:
+// no tracked file content may disappear, and any residue outside the hidden
+// backup/staging names must be announced by a rollback failure in the error.
+// A seam that also breaks compensation would make an exact-snapshot assertion
+// meaningless, so the invariant is data preservation plus disclosure.
+func mustFailSafely(t *testing.T, w *world, source string, force bool) error {
+	t.Helper()
+	before := w.snapshot()
+	err := addErr(t, w, source, force)
+	checkSafeFailure(t, before, w.snapshot(), err)
+	return err
+}
+
+func mustFailSafelyNamed(t *testing.T, w *world, source, name string) error {
+	t.Helper()
+	before := w.snapshot()
+	err := addErrNamed(t, w, source, name)
+	checkSafeFailure(t, before, w.snapshot(), err)
+	return err
+}
+
+func checkSafeFailure(t *testing.T, before, after string, err error) {
+	t.Helper()
+	remaining := map[string]int{}
+	for _, line := range strings.Split(after, "\n") {
+		if strings.HasPrefix(line, "F ") {
+			remaining[line[strings.LastIndex(line, " ")+1:]]++
+		}
+	}
+	for _, line := range strings.Split(before, "\n") {
+		if !strings.HasPrefix(line, "F ") {
+			continue
+		}
+		content := line[strings.LastIndex(line, " ")+1:]
+		if remaining[content] == 0 {
+			t.Fatalf("failed add lost file content %q:\n--- before ---\n%s\n--- after ---\n%s", content, before, after)
+		}
+		remaining[content]--
+	}
+	if strings.Contains(err.Error(), "rollback failed") {
+		return
+	}
+	for _, line := range diffSnapshot(before, after) {
+		if strings.Contains(line, "/.bak") || strings.Contains(line, ".ianchor-tmp-") {
+			continue
+		}
+		t.Fatalf("failed add left unreported residue %q: %v", line, err)
+	}
+}
+
+func diffSnapshot(before, after string) []string {
+	counts := map[string]int{}
+	for _, line := range strings.Split(before, "\n") {
+		counts["-"+line]++
+	}
+	var diff []string
+	for _, line := range strings.Split(after, "\n") {
+		if counts["-"+line] > 0 {
+			counts["-"+line]--
+			continue
+		}
+		diff = append(diff, line)
+	}
+	for key, n := range counts {
+		for i := 0; i < n; i++ {
+			diff = append(diff, key[1:])
+		}
+	}
+	return diff
 }
 
 func addErrNamed(t *testing.T, w *world, source, name string) error {

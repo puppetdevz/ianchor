@@ -119,13 +119,14 @@ func TestTerminalPromptRedrawsOnResize(t *testing.T) {
 func TestTerminalPromptSuspendCallback(t *testing.T) {
 	master, slave := openTestPTY(t)
 	stubTerminalSignals(t)
-	pausing := &session{in: bufio.NewReader(slave), inputFile: slave, outputFile: slave, out: &bytes.Buffer{}, errOut: &bytes.Buffer{}}
+	out := newMutexBuffer()
+	pausing := &session{in: bufio.NewReader(slave), inputFile: slave, outputFile: slave, out: out, errOut: &bytes.Buffer{}}
 	done := make(chan bool, 1)
 	go func() {
 		_, ok := pausing.terminalPrompt("> ")
 		done <- ok
 	}()
-	time.Sleep(50 * time.Millisecond)
+	waitForOutput(t, out, "> ")
 	if _, err := master.Write([]byte("\x1a")); err != nil {
 		t.Fatal(err)
 	}
@@ -178,6 +179,15 @@ func TestProtectTerminalSignalForwardingAndInstallFailure(t *testing.T) {
 		t.Fatal("termination signal was not forwarded")
 	}
 	cleanup()
+	// A suspend that arrives after cleanup must return instead of waiting for a
+	// SIGCONT handler that no longer exists.
+	afterCleanup := make(chan struct{})
+	go func() { suspend(); close(afterCleanup) }()
+	select {
+	case <-afterCleanup:
+	case <-time.After(2 * time.Second):
+		t.Fatal("suspend after cleanup blocked")
+	}
 
 	failing := errors.New("termios rejected")
 	originalSet := setTerminalMode

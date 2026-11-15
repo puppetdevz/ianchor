@@ -68,11 +68,7 @@ func TestCopyResolvedSymlinkTargetStatFailure(t *testing.T) {
 	if err := os.Symlink(filepath.Join(srcDir, "real"), link); err != nil {
 		t.Fatal(err)
 	}
-	dstDir := t.TempDir()
 	override(t, &statResolvedTarget, func(string) (os.FileInfo, error) { return nil, os.ErrPermission })
-	if err := CopyNode(link, filepath.Join(dstDir, "copy")); !errors.Is(err, os.ErrPermission) {
-		t.Fatalf("copy err=%v", err)
-	}
 	_, root := newCopyRoot(t)
 	if err := CopyNodeIntoRoot(link, root, "copy", nil); !errors.Is(err, os.ErrPermission) {
 		t.Fatalf("rooted copy err=%v", err)
@@ -88,50 +84,9 @@ func TestCopyReadlinkFailure(t *testing.T) {
 	}
 	failing := errors.New("readlink rejected")
 	override(t, &readlinkPath, func(string) (string, error) { return "", failing })
-	if err := Copy(link, filepath.Join(t.TempDir(), "copy")); !errors.Is(err, failing) {
-		t.Fatalf("plain copy err=%v", err)
-	}
 	_, root := newCopyRoot(t)
 	if err := CopyIntoRoot(link, root, "copy", nil); !errors.Is(err, failing) {
 		t.Fatalf("rooted copy err=%v", err)
-	}
-}
-
-func TestCopyTrackedReportsCreatedDirectory(t *testing.T) {
-	srcDir := t.TempDir()
-	writeTree(t, srcDir, nil, []string{"d"})
-	created := 0
-	if err := CopyTracked(filepath.Join(srcDir, "d"), filepath.Join(t.TempDir(), "copy"), func() { created++ }); err != nil {
-		t.Fatal(err)
-	}
-	if created != 1 {
-		t.Fatalf("created=%d", created)
-	}
-}
-
-func TestCopyFileReportsCloseFailure(t *testing.T) {
-	srcDir := t.TempDir()
-	writeTree(t, srcDir, []string{"f"}, nil)
-	failing := errors.New("close rejected")
-	override(t, &closeCreatedFile, func(*os.File) error { return failing })
-	if err := Copy(filepath.Join(srcDir, "f"), filepath.Join(t.TempDir(), "copy")); !errors.Is(err, failing) {
-		t.Fatalf("copy err=%v", err)
-	}
-	override(t, &chmodCopyDir, func(string, os.FileMode) error { return failing })
-	writeTree(t, srcDir, nil, []string{"d"})
-	if err := Copy(filepath.Join(srcDir, "d"), filepath.Join(t.TempDir(), "copy")); !errors.Is(err, failing) {
-		t.Fatalf("directory copy err=%v", err)
-	}
-}
-
-func TestMoveReportsCrossVolumeCopyAndDelete(t *testing.T) {
-	srcDir := t.TempDir()
-	writeTree(t, srcDir, []string{"f"}, nil)
-	renameFailure := &os.LinkError{Op: "rename", Old: "a", New: "b", Err: syscall.EXDEV}
-	override(t, &renamePath, func(string, string) error { return renameFailure })
-	crossed, err := Move(filepath.Join(srcDir, "f"), filepath.Join(t.TempDir(), "f"))
-	if err != nil || !crossed {
-		t.Fatalf("move crossed=%v err=%v", crossed, err)
 	}
 }
 

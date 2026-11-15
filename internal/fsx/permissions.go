@@ -173,7 +173,7 @@ func PrepareCopyAccess(root *os.Root, path string, file *os.File, mode os.FileMo
 	if err != nil {
 		return err
 	}
-	if err := chmodPrepareFinal(file, mode.Perm()); err != nil {
+	if err := file.Chmod(mode.Perm()); err != nil {
 		return err
 	}
 	accessErr := verifyCopyAccess(root, path, identity)

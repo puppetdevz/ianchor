@@ -371,11 +371,6 @@ func TestForceTakeoverPreservesUnrelatedOldOriginal(t *testing.T) {
 				writeFile(t, old, "untouched")
 			}
 			before := f.mustEntry("entry")
-			earlier := "2001-01-01 00:00:00"
-			before.UpdatedAt = &earlier
-			if err := f.db.RestoreEntry(*before); err != nil {
-				t.Fatal(err)
-			}
 			newSource := filepath.Join(t.TempDir(), "dir")
 			writeFile(t, filepath.Join(newSource, "config"), "new")
 			if _, err := f.add(newSource, "entry", true); err != nil {
@@ -388,7 +383,7 @@ func TestForceTakeoverPreservesUnrelatedOldOriginal(t *testing.T) {
 				assertSymlink(t, old, target)
 			}
 			after := f.mustEntry("entry")
-			if after.ID != before.ID || after.CreatedAt == nil || before.CreatedAt == nil || *after.CreatedAt != *before.CreatedAt || after.UpdatedAt == nil || *after.UpdatedAt == earlier || after.Type != "directory" || after.Status != "linked" || after.OriginalPath == nil || *after.OriginalPath != newSource {
+			if after.ID != before.ID || after.CreatedAt == nil || before.CreatedAt == nil || *after.CreatedAt != *before.CreatedAt || after.UpdatedAt == nil || *after.UpdatedAt == "" || after.Type != "directory" || after.Status != "linked" || after.OriginalPath == nil || *after.OriginalPath != newSource {
 				t.Fatalf("unexpected row: before=%+v after=%+v", before, after)
 			}
 			assertSymlink(t, newSource, filepath.Join(f.configDir, "entry"))

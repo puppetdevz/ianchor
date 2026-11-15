@@ -192,6 +192,20 @@ func TestRollbackCreationFailures(t *testing.T) {
 		if !strings.Contains(strings.Join(failures, "; "), want) {
 			t.Fatalf("failures %v, want %q", failures, want)
 		}
+		// A reported failure must leave the backup directory in place: it is
+		// either still named .bak or parked under a staging name the report
+		// names. Silently deleting it would contradict the reported error.
+		configDir := filepath.Dir(root.display)
+		if _, err := os.Lstat(root.display); err == nil {
+			return
+		}
+		matches, err := filepath.Glob(filepath.Join(configDir, ".*backup-root-undo*"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) == 0 {
+			t.Fatalf("backup directory vanished after reported failure %v", failures)
+		}
 	}
 	t.Run("attached", func(t *testing.T) {
 		rollback(t, "detached", func(t *testing.T) {

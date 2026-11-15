@@ -15,7 +15,6 @@ var (
 	lstatPath             = os.Lstat
 	statResolvedTarget    = os.Stat
 	readlinkPath          = os.Readlink
-	renamePath            = os.Rename
 	statSourceDirIdentity = func(file *os.File) (os.FileInfo, error) { return file.Stat() }
 	statPinnedDestination = func(file *os.File) (os.FileInfo, error) { return file.Stat() }
 	statPinnedMode        = func(file *os.File) (os.FileInfo, error) { return file.Stat() }
@@ -30,7 +29,6 @@ var (
 	// Destination observations and creation inside an opened root.
 	rootLstatCreatedSymlink = func(root *os.Root, name string) (os.FileInfo, error) { return root.Lstat(name) }
 	rootLstatCreatedDir     = func(root *os.Root, name string) (os.FileInfo, error) { return root.Lstat(name) }
-	rootLstatVisibleCopy    = func(root *os.Root, name string) (os.FileInfo, error) { return root.Lstat(name) }
 	openChildDot            = func(root *os.Root, name string) (*os.File, error) { return root.Open(name) }
 	openSourceDot           = func(root *os.Root, name string) (*os.File, error) { return root.Open(name) }
 	openSourceParentDot     = func(root *os.Root, name string) (*os.File, error) { return root.Open(name) }
@@ -44,14 +42,10 @@ var (
 	}
 
 	// Modes on handles this operation created.
-	chmodCopyDir          = os.Chmod
-	chmodCreatedFile      = os.Chmod
 	chmodPinnedTemporary  = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
 	chmodPinnedFinal      = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
 	chmodCreatedFileFinal = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
-	chmodPrepareFinal     = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
 	chmodPrepareRestore   = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
-	closeCreatedFile      = func(file *os.File) error { return file.Close() }
 )
 
 // Fault injection seams are unit-test only. Production never sets them, and

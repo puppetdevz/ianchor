@@ -15,10 +15,8 @@ var (
 	watchSignals    = func(c chan os.Signal) {
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGCONT)
 	}
-	unwatchSignals = signal.Stop
-	resetSignal    = signal.Reset
-	signalProcess  = syscall.Kill
-	watchResize    = watchTerminalResize
+	signalProcess = syscall.Kill
+	watchResize   = watchTerminalResize
 )
 
 // Register before exposing raw mode. The mutex orders raw installation,
@@ -63,7 +61,7 @@ func protectTerminal(fd int, onContinue func()) (cleanup func(), suspend func(),
 				}
 				_ = setTerminalMode(fd, unix.TIOCSETA, original)
 				state.Unlock()
-				resetSignal(received)
+				signal.Reset(received)
 				_ = signalProcess(os.Getpid(), received.(syscall.Signal))
 			case <-done:
 				return
@@ -75,12 +73,18 @@ func protectTerminal(fd int, onContinue func()) (cleanup func(), suspend func(),
 		closing = true
 		_ = setTerminalMode(fd, unix.TIOCSETA, original)
 		state.Unlock()
-		unwatchSignals(signals)
+		signal.Stop(signals)
 		close(done)
 		<-exited
 	}
 	suspend = func() {
 		state.Lock()
+		// A suspend that arrives after cleanup has no handler left to send
+		// SIGCONT, so waiting for resume would block forever.
+		if closing {
+			state.Unlock()
+			return
+		}
 		suspended = true
 		_ = setTerminalMode(fd, unix.TIOCSETA, original)
 		state.Unlock()

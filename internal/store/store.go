@@ -216,19 +216,6 @@ func (db *DB) GetEntry(name string) (*Entry, error) {
 	return entry, nil
 }
 
-// GetEntryByID returns the row with the given id, or nil.
-func (db *DB) GetEntryByID(id int64) (*Entry, error) {
-	row := db.sql.QueryRow(selectColumns+" FROM entries WHERE id = ?", id)
-	entry, err := scanEntry(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, NormalizeError(err)
-	}
-	return entry, nil
-}
-
 const selectColumns = "SELECT id, name, original_path, type, status, created_at, updated_at"
 
 // AllEntries returns every tracked entry ordered by name, like the Node list
@@ -296,19 +283,6 @@ func (db *DB) DeleteEntry(name string) error {
 	return NormalizeError(err)
 }
 
-// PutEntry writes a full row, preserving id and timestamps. It is used to undo
-// a delete during compensation.
-func (db *DB) PutEntry(entry Entry) error {
-	if err := db.writable(); err != nil {
-		return err
-	}
-	_, err := db.sql.Exec(
-		"INSERT INTO entries (id, name, original_path, type, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		entry.ID, entry.Name, entry.OriginalPath, entry.Type, entry.Status, entry.CreatedAt, entry.UpdatedAt,
-	)
-	return NormalizeError(err)
-}
-
 type rowScanner interface {
 	Scan(dest ...any) error
 }
@@ -360,28 +334,4 @@ func scanEntry(row rowScanner) (*Entry, error) {
 		entry.UpdatedAt = &v
 	}
 	return &entry, nil
-}
-
-// RestoreEntry writes a full row back, replacing any row with the same name or
-// id. It is the compensation path for a delete or an overwrite.
-func (db *DB) RestoreEntry(entry Entry) error {
-	if err := db.writable(); err != nil {
-		return err
-	}
-	_, err := db.sql.Exec(`INSERT OR REPLACE INTO entries (id, name, original_path, type, status, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		entry.ID, entry.Name, entry.OriginalPath, entry.Type, entry.Status, entry.CreatedAt, entry.UpdatedAt)
-	return NormalizeError(err)
-}
-
-// RestoreFields restores original_path, type, status and timestamps of an
-// existing row, preserving its id.
-func (db *DB) RestoreFields(entry Entry) error {
-	if err := db.writable(); err != nil {
-		return err
-	}
-	_, err := db.sql.Exec(
-		"UPDATE entries SET original_path = ?, type = ?, status = ?, created_at = ?, updated_at = ? WHERE name = ?",
-		entry.OriginalPath, entry.Type, entry.Status, entry.CreatedAt, entry.UpdatedAt, entry.Name)
-	return NormalizeError(err)
 }

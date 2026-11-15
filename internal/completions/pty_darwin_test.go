@@ -133,10 +133,29 @@ func (s *shellSession) snapshot() string {
 	return s.buffer
 }
 
-func (s *shellSession) read(timeout time.Duration) string {
+// waitFor polls the terminal until every needle has appeared. Listing output
+// has no reliable completion marker, so the assertions poll instead of
+// sleeping for a fixed time and hoping the shell was fast enough.
+func (s *shellSession) waitFor(want ...string) {
 	s.t.Helper()
-	time.Sleep(timeout)
-	return s.snapshot()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		buffer := s.snapshot()
+		missing := ""
+		for _, needle := range want {
+			if !strings.Contains(buffer, needle) {
+				missing = needle
+				break
+			}
+		}
+		if missing == "" {
+			return
+		}
+		if time.Now().After(deadline) {
+			s.t.Fatalf("terminal output never showed %q in:\n%s", missing, buffer)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func (s *shellSession) expect(needle string) {
@@ -345,13 +364,7 @@ func TestBashInteractiveListsCommands(t *testing.T) {
 	session.expect(wantCompletePrompt)
 	// bash 3.2 lists candidates on the second Tab.
 	session.write("ianchor re\t\t")
-	time.Sleep(900 * time.Millisecond)
-	session.read(500 * time.Millisecond)
-	for _, want := range []string{"recover", "relink", "remove"} {
-		if !strings.Contains(session.snapshot(), want) {
-			t.Fatalf("listing missing %q:\n%s", want, session.snapshot())
-		}
-	}
+	session.waitFor("recover", "relink", "remove")
 }
 
 func TestZshInteractiveCompletion(t *testing.T) {
@@ -407,11 +420,5 @@ func TestZshInteractiveListsCommands(t *testing.T) {
 	session.write("source " + scriptPath(t, "zsh") + "\n")
 	session.expect(wantCompletePrompt)
 	session.write("ianchor re\t")
-	time.Sleep(900 * time.Millisecond)
-	session.read(700 * time.Millisecond)
-	for _, want := range []string{"recover", "relink", "remove"} {
-		if !strings.Contains(session.snapshot(), want) {
-			t.Fatalf("listing missing %q:\n%s", want, session.snapshot())
-		}
-	}
+	session.waitFor("recover", "relink", "remove")
 }

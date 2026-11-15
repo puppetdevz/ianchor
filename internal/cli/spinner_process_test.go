@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,7 +24,9 @@ func TestSpinnerProcessHelper(t *testing.T) {
 	command := &Command{Name: "ianchor", Action: func(ctx *Context) error {
 		spinner := ctx.Spinner()
 		if mode == "error" {
-			time.Sleep(300 * time.Millisecond)
+			// The parent acknowledges the drawn frames on stdin, so no fixed
+			// delay decides when the failure is reported.
+			_, _ = io.CopyN(io.Discard, os.Stdin, 1)
 			spinner.Stop()
 			return errors.New("delayed list failure")
 		}
@@ -60,6 +63,13 @@ func TestSpinnerProcessFailureAndSignals(t *testing.T) {
 			capture := &spinnerCapture{ready: make(chan struct{})}
 			cmd.Stdout = &stdout
 			cmd.Stderr = capture
+			release, releaseWriter, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer release.Close()
+			defer releaseWriter.Close()
+			cmd.Stdin = release
 			if err := cmd.Start(); err != nil {
 				t.Fatal(err)
 			}
@@ -72,6 +82,11 @@ func TestSpinnerProcessFailureAndSignals(t *testing.T) {
 				t.Fatalf("exited before drawing frames: %v %q", err, capture.String())
 			case <-time.After(10 * time.Second):
 				t.Fatal("spinner did not draw frames")
+			}
+			if mode == "error" {
+				if _, err := releaseWriter.Write([]byte("go")); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if mode != "error" {
 				signal := syscall.SIGINT

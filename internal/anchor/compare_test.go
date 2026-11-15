@@ -46,9 +46,9 @@ func TestVerifySnapshotBasicDifferences(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			source := filepath.Join(root, "source")
-			snapshot := filepath.Join(root, "snapshot")
+			base := t.TempDir()
+			source := filepath.Join(base, "source")
+			snapshot := filepath.Join(base, "snapshot")
 			if err := os.Mkdir(source, 0750); err != nil {
 				t.Fatal(err)
 			}
@@ -59,7 +59,12 @@ func TestVerifySnapshotBasicDifferences(t *testing.T) {
 			if err := os.Symlink("file", filepath.Join(source, "link")); err != nil {
 				t.Fatal(err)
 			}
-			if err := fsx.Copy(source, snapshot); err != nil {
+			root, err := os.OpenRoot(base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer root.Close()
+			if err := fsx.CopyIntoRoot(source, root, "snapshot", nil); err != nil {
 				t.Fatal(err)
 			}
 			if err := verifySnapshot(source, snapshot); err != nil {

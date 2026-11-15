@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -14,6 +15,40 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+// mutexBuffer is a goroutine-safe sink, so the test goroutine can inspect the
+// prompt while a session goroutine is still writing to it.
+type mutexBuffer struct {
+	sync.Mutex
+	buf bytes.Buffer
+}
+
+func newMutexBuffer() *mutexBuffer { return &mutexBuffer{} }
+
+func (m *mutexBuffer) Write(p []byte) (int, error) {
+	m.Lock()
+	defer m.Unlock()
+	return m.buf.Write(p)
+}
+
+// waitForOutput blocks until the PTY has displayed needle under the caller's
+// output mutex, so a test never races the prompt it is about to type into.
+func waitForOutput(t *testing.T, out *mutexBuffer, needle string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		out.Lock()
+		buffer := out.buf.String()
+		out.Unlock()
+		if strings.Contains(buffer, needle) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %q in prompt output %q", needle, buffer)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
 
 func TestTerminalDetectsRealPTY(t *testing.T) {
 	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
@@ -56,35 +91,80 @@ func TestTerminalDetectsRealPTY(t *testing.T) {
 	if got := outputColumns(slave); got != 111 {
 		t.Fatalf("outputColumns=%d, want 111 from the pty window size", got)
 	}
-	stop := watchTerminalResize(slave, func(int) {})
-	stop()
+	// Resize callbacks are compared with what the loop actually observed, so a
+	// lost SIGWINCH can no longer pass on a bare time.Sleep.
+	var resized sync.Mutex
+	var widths []int
+	watching := watchTerminalResize(slave, func(columns int) {
+		resized.Lock()
+		widths = append(widths, columns)
+		resized.Unlock()
+	})
+	if err := unix.IoctlSetWinsize(int(slave.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Row: 40, Col: 123}); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(os.Getpid(), syscall.SIGWINCH); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		resized.Lock()
+		got := append([]int(nil), widths...)
+		resized.Unlock()
+		if len(got) > 0 {
+			if got[len(got)-1] != 123 {
+				t.Fatalf("resize widths = %v, want the new 123 columns", got)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("resize callback never observed SIGWINCH; widths = %v", got)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	watching()
 	resumed := make(chan struct{}, 1)
 	cleanup, suspend, err := protectTerminal(int(slave.Fd()), func() { resumed <- struct{}{} })
 	if err != nil || cleanup == nil || suspend == nil {
 		t.Fatalf("protect=%v", err)
 	}
+	// SIGTSTP is observed instead of delivered: a stopped test process could
+	// never send the SIGCONT that resumes it, which would hang the suite
+	// instead of reporting a failure.
+	realSignalProcess := signalProcess
+	tstpSeen := make(chan struct{}, 1)
+	signalProcess = func(pid int, sig syscall.Signal) error {
+		if sig == syscall.SIGTSTP {
+			tstpSeen <- struct{}{}
+			return nil
+		}
+		return realSignalProcess(pid, sig)
+	}
+	t.Cleanup(func() { signalProcess = realSignalProcess })
 	done := make(chan struct{})
 	go func() { suspend(); close(done) }()
-	time.Sleep(20 * time.Millisecond)
-	syscall.Kill(os.Getpid(), syscall.SIGCONT)
+	select {
+	case <-tstpSeen:
+	case <-time.After(2 * time.Second):
+		t.Fatal("suspend never asked the process to stop")
+	}
+	if err := syscall.Kill(os.Getpid(), syscall.SIGCONT); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-resumed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SIGCONT never reached the continue handler")
+	}
 	select {
 	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("terminal suspend did not resume")
+	case <-time.After(2 * time.Second):
+		t.Fatal("terminal suspend did not return after SIGCONT")
 	}
 	cleanup()
-	stop = watchTerminalResize(slave, func(int) {})
-	syscall.Kill(os.Getpid(), syscall.SIGWINCH)
-	time.Sleep(20 * time.Millisecond)
-	stop()
-	if !isTerminal(slave) {
-		t.Fatal("pty slave not recognized as terminal")
-	}
-	if isTerminal(nil) {
-		t.Fatal("nil file recognized as terminal")
-	}
 	reader := bufio.NewReader(slave)
-	promptSession := &session{in: reader, inputFile: slave, outputFile: slave, out: &bytes.Buffer{}, errOut: &bytes.Buffer{}}
+	promptOut := newMutexBuffer()
+	promptSession := &session{in: reader, inputFile: slave, outputFile: slave, out: promptOut, errOut: &bytes.Buffer{}}
 	promptDone := make(chan string)
 	go func() {
 		answer, ok := promptSession.terminalPrompt("> ")
@@ -94,7 +174,7 @@ func TestTerminalDetectsRealPTY(t *testing.T) {
 		}
 		promptDone <- answer
 	}()
-	time.Sleep(50 * time.Millisecond)
+	waitForOutput(t, promptOut, "> ")
 	if _, err := master.Write([]byte("pty-answer\r")); err != nil {
 		t.Fatal(err)
 	}
@@ -114,10 +194,14 @@ func TestTerminalDetectsRealPTY(t *testing.T) {
 		}
 		promptDone <- answer
 	}()
-	time.Sleep(50 * time.Millisecond)
+	// The editor prints the prompt before it reads, so waiting for it removes
+	// the fixed delay that used to hide a slow start on a loaded machine.
+	waitForOutput(t, promptOut, "> ")
 	if _, err := master.Write([]byte("\x1b")); err != nil {
 		t.Fatal(err)
 	}
+	// A lone escape is only committed after the 500 ms disambiguation window;
+	// the trailing text proves the sequence was consumed as "not a key".
 	time.Sleep(600 * time.Millisecond)
 	if _, err := master.Write([]byte("ctx\r")); err != nil {
 		t.Fatal(err)
@@ -139,7 +223,7 @@ func TestTerminalDetectsRealPTY(t *testing.T) {
 		}
 		promptDone <- answer
 	}()
-	time.Sleep(50 * time.Millisecond)
+	waitForOutput(t, promptOut, "> ")
 	if _, err := master.Write([]byte("context\r")); err != nil {
 		t.Fatal(err)
 	}

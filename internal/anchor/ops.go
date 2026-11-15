@@ -150,7 +150,7 @@ func removePinned(root *os.Root, path string, info os.FileInfo) error {
 	}
 	base := filepath.Base(path)
 	var actual unix.Stat_t
-	if err := fstatatPath(int(parent.Fd()), base, &actual, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	if err := unix.Fstatat(int(parent.Fd()), base, &actual, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
 	}
 	expected, ok := info.Sys().(*syscall.Stat_t)
@@ -161,7 +161,7 @@ func removePinned(root *os.Root, path string, info os.FileInfo) error {
 	if info.Mode()&os.ModeSymlink != 0 {
 		flags = 0
 	}
-	return unlinkatPath(int(parent.Fd()), base, flags)
+	return unix.Unlinkat(int(parent.Fd()), base, flags)
 }
 
 func ensureParentWritable(parent *os.File, info os.FileInfo) (func(), error) {

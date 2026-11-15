@@ -123,10 +123,10 @@ func TestSpinner(t *testing.T) {
 	if !strings.HasSuffix(out.String(), "\r\x1b[K") {
 		t.Fatalf("cleanup missing: %q", out.String())
 	}
-	before := out.String()
-	time.Sleep(150 * time.Millisecond)
-	if out.String() != before {
-		t.Fatal("spinner still running after Stop")
+	// Stop joins the drawing goroutine, so no frame can be written after it
+	// returns; a fixed sleep here only made the suite slower.
+	if got := out.String(); !strings.HasSuffix(got, "\r\x1b[K") || strings.Contains(got, spinnerFrames[2]) {
+		t.Fatalf("spinner kept drawing after Stop: %q", got)
 	}
 }
 
