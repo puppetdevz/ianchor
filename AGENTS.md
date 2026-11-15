@@ -15,8 +15,8 @@ GOTOOLCHAIN=local CGO_ENABLED=0 go test ./...    # Run all tests
 GOTOOLCHAIN=local CGO_ENABLED=0 go test ./internal/anchor/  # Run one package
 go vet ./...                                     # Vet
 CGO_ENABLED=1 go test -race ./...                # Race detector
-go test -coverprofile=/tmp/cover.out ./...       # Statement coverage
-go tool cover -func=/tmp/cover.out | tail -1     # Total coverage (must print 100.0%)
+GOTOOLCHAIN=local CGO_ENABLED=0 go test -count=1 -coverprofile=/tmp/cover.out ./...
+./scripts/coverage-check.sh /tmp/cover.out       # Gate: every function at 100.0%, zero uncovered statements
 gofmt -l .                                       # Must print nothing
 ```
 
