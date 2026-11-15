@@ -2,3 +2,5 @@
 !internal/store/testdata/legacy-v1.1.1.db
 .ianchor-tmp-*
 __pycache__/
+internal/store/testdata/*.db-wal
+internal/store/testdata/*.db-shm
