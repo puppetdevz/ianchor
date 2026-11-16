@@ -15,8 +15,9 @@ import (
 // without a guard is a test failure rather than a quiet gap.
 func TestSeamsDefaultToRealCalls(t *testing.T) {
 	direct := map[string][2]uintptr{
-		"homeDir":   {reflect.ValueOf(homeDir).Pointer(), reflect.ValueOf(os.UserHomeDir).Pointer()},
-		"parentDir": {reflect.ValueOf(parentDir).Pointer(), reflect.ValueOf(filepath.Dir).Pointer()},
+		"evalSymlinks": {reflect.ValueOf(evalSymlinks).Pointer(), reflect.ValueOf(filepath.EvalSymlinks).Pointer()},
+		"homeDir":      {reflect.ValueOf(homeDir).Pointer(), reflect.ValueOf(os.UserHomeDir).Pointer()},
+		"parentDir":    {reflect.ValueOf(parentDir).Pointer(), reflect.ValueOf(filepath.Dir).Pointer()},
 	}
 	for name, pair := range direct {
 		if pair[0] != pair[1] {
@@ -46,5 +47,18 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 	}
 	if decoded.DirName != "ianchor" {
 		t.Fatalf("marshalConfig round trip = %+v, want DirName ianchor", decoded)
+	}
+	// evalSymlinks resolves the real filesystem, so a tampered config cannot
+	// hide a redirect from ensureWithin.
+	base := t.TempDir()
+	inside := filepath.Join(base, "inside")
+	if err := os.Mkdir(inside, 0o755); err != nil {
+		t.Fatalf("mkdir inside: %v", err)
+	}
+	if err := ensureWithin(base, filepath.Join(inside, "missing", "deeper")); err != nil {
+		t.Fatalf("ensureWithin inside the base: %v", err)
+	}
+	if err := ensureWithin(base, filepath.Join(t.TempDir(), "outside")); err == nil {
+		t.Fatal("ensureWithin accepted a path outside the base")
 	}
 }

@@ -1,6 +1,7 @@
 package fsx
 
 import (
+	"crypto/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,11 +28,26 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 		"openRootPath":       {seamAddress(openRootPath), seamAddress(os.OpenRoot)},
 		"openatPath":         {seamAddress(openatPath), seamAddress(unix.Openat)},
 		"fstatatChild":       {seamAddress(fstatatChild), seamAddress(unix.Fstatat)},
+		"workingDirectory":   {seamAddress(workingDirectory), seamAddress(os.Getwd)},
 	}
 	for name, pair := range direct {
 		if pair[0] != pair[1] {
 			t.Errorf("%s does not default to the real call", name)
 		}
+	}
+
+	// randomReader is compared as an interface value: production reads
+	// crypto/rand.Reader, and a stub would silently weaken every staging token.
+	if randomReader != rand.Reader {
+		t.Errorf("randomReader is not crypto/rand.Reader")
+	}
+	// The fault injection seams are exported for internal/anchor tests only and
+	// must stay nil, or a shipped binary would fail its first copy.
+	if TestCopyFault != nil {
+		t.Error("TestCopyFault is not nil in production")
+	}
+	if TestPermissionFault != nil {
+		t.Error("TestPermissionFault is not nil in production")
 	}
 
 	dir := t.TempDir()

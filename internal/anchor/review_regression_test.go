@@ -3226,3 +3226,62 @@ func TestCleanupDoesNotFollowDirectorySymlink(t *testing.T) {
 		t.Fatalf("symlink remains: %v", statErr)
 	}
 }
+
+// TestAddRefusesToSilentlyKeepStaleOriginalPath pins DELTA-018: when the shared
+// entity is gone but a row still tracks the name, a plain add used to go through
+// dbAdd's INSERT OR IGNORE, creating a symlink for a path the row does not
+// mention. The entry must be refused with an actionable message instead.
+func TestAddRefusesToSilentlyKeepStaleOriginalPath(t *testing.T) {
+	w := newWorld(t)
+	first := w.write("first/zshrc", "one")
+	if _, err := Add(w.db, AddOptions{ConfigDir: w.configDir, Source: first, Name: "zshrc"}); err != nil {
+		t.Fatal(err)
+	}
+	// The shared entity disappears but the row survives, as after a manual
+	// delete or an interrupted cleanup.
+	if err := os.Remove(filepath.Join(w.configDir, "zshrc")); err != nil {
+		t.Fatal(err)
+	}
+	second := w.write("second/zshrc", "two")
+	_, err := Add(w.db, AddOptions{ConfigDir: w.configDir, Source: second, Name: "zshrc"})
+	if err == nil {
+		t.Fatal("stale row silently reused")
+	}
+	want := `"zshrc" is still tracked but its iCloud copy is missing. Use --force to take over the entry, or run "ianchor remove zshrc" first.`
+	if err.Error() != want {
+		t.Fatalf("err = %q\nwant  %q", err, want)
+	}
+	// Nothing may have been written: no symlink, no cloud entry, no new row.
+	if _, err := os.Lstat(second); err != nil {
+		t.Fatalf("source changed: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(w.configDir, "zshrc")); !os.IsNotExist(err) {
+		t.Fatalf("cloud entry created: %v", err)
+	}
+	entry, err := w.db.GetEntry("zshrc")
+	if err != nil || entry == nil || entry.OriginalPath == nil || *entry.OriginalPath != first {
+		t.Fatalf("row changed: %+v %v", entry, err)
+	}
+}
+
+// TestAddForceTakesOverStaleRow confirms the documented escape hatch: force
+// owns the entry and rewrites original_path.
+func TestAddForceTakesOverStaleRow(t *testing.T) {
+	w := newWorld(t)
+	first := w.write("first/zshrc", "one")
+	if _, err := Add(w.db, AddOptions{ConfigDir: w.configDir, Source: first, Name: "zshrc"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(w.configDir, "zshrc")); err != nil {
+		t.Fatal(err)
+	}
+	second := w.write("second/zshrc", "two")
+	if _, err := Add(w.db, AddOptions{ConfigDir: w.configDir, Source: second, Name: "zshrc", Force: true}); err != nil {
+		t.Fatalf("force add: %v", err)
+	}
+	entry, err := w.db.GetEntry("zshrc")
+	if err != nil || entry == nil || entry.OriginalPath == nil || *entry.OriginalPath != second {
+		t.Fatalf("row = %+v %v", entry, err)
+	}
+	assertSymlink(t, second, filepath.Join(w.configDir, "zshrc"))
+}

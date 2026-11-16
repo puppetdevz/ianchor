@@ -97,6 +97,12 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 	if err != nil {
 		return AddResult{}, err
 	}
+	if previous != nil && !opts.Force && !fsx.Lexists(destPath) {
+		// A row without a shared entity would be reused by dbAdd's
+		// INSERT OR IGNORE, keeping the old original_path while this call
+		// creates a symlink for a different path (DELTA-018, REQ-006).
+		return AddResult{}, fmt.Errorf("\"%s\" is still tracked but its iCloud copy is missing. Use --force to take over the entry, or run \"ianchor remove %s\" first.", destName, destName)
+	}
 	if opts.Force && fsx.Lexists(destPath) {
 		destination, err := lstatPath(destPath)
 		if err != nil {

@@ -2,6 +2,7 @@ package anchor
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -415,16 +416,10 @@ func checkSafeFailure(t *testing.T, before, after string, err error) {
 		}
 		remaining[line]--
 	}
-	// A residue is allowed only when it is a disclosed leftover (the error says
-	// the rollback failed) at a backup or staging path, or when the error names
-	// it exactly. Reporting "rollback failed" is not a licence to leave
-	// unexplained files behind: the operator needs the exact location.
-	disclosed := err != nil && strings.Contains(err.Error(), "rollback failed")
+	// A residue is allowed only when the error names its path exactly. Saying
+	// "rollback failed" is not a licence to leave unexplained files behind:
+	// the operator needs to know where the leftover is.
 	for _, line := range diffSnapshot(before, after) {
-		isStaging := strings.Contains(line, "/.bak") || strings.Contains(line, ".ianchor-tmp-")
-		if isStaging && disclosed {
-			continue
-		}
 		if namesResidue(line, err) {
 			continue
 		}
@@ -454,15 +449,78 @@ func namesResidue(line string, err error) bool {
 	if err == nil {
 		return false
 	}
-	fields := strings.Fields(line)
-	if len(fields) < 2 {
+	return namesPath(err.Error(), snapshotPath(line))
+}
+
+// snapshotPath pulls the path out of a snapshot line. Paths may contain
+// spaces, so the fields cannot be split: the record shape's own separators
+// bound the path instead.
+func snapshotPath(line string) string {
+	if len(line) < 3 || line[1] != ' ' {
+		return ""
+	}
+	rest := line[2:]
+	if i := strings.Index(rest, " mode="); i >= 0 {
+		rest = rest[:i]
+	}
+	if i := strings.Index(rest, " -> "); i >= 0 {
+		rest = rest[:i]
+	}
+	return rest
+}
+
+// namesPath reports whether text mentions path as a whole path. A prefix hit
+// such as "local/item" inside "local/item-undo" does not count, because the
+// operator would look in the wrong place.
+func namesPath(text, path string) bool {
+	if path == "" {
 		return false
 	}
-	path := fields[1]
-	if _, _, ok := strings.Cut(path, " -> "); ok {
-		path, _, _ = strings.Cut(path, " -> ")
+	for start := 0; start <= len(text); {
+		i := strings.Index(text[start:], path)
+		if i < 0 {
+			return false
+		}
+		i += start
+		end := i + len(path)
+		// Snapshot paths are relative to the world root while messages carry
+		// absolute paths, so a leading separator is a real boundary; a
+		// trailing one is not, because it would extend the path.
+		if !pathLeadByte(text, i-1) && !pathByte(text, end) {
+			return true
+		}
+		start = i + 1
 	}
-	return strings.Contains(err.Error(), path)
+	return false
+}
+
+// pathLeadByte is pathByte minus the separator: a match may start right after
+// a slash, since messages name absolute paths.
+func pathLeadByte(text string, index int) bool {
+	if index < 0 || index >= len(text) {
+		return false
+	}
+	if text[index] == '/' {
+		return false
+	}
+	return pathByte(text, index)
+}
+
+// pathByte reports whether the byte at index could continue a path, which is
+// what makes a substring hit ambiguous. Quotes, spaces and punctuation end a
+// path in the messages ianchor produces.
+func pathByte(text string, index int) bool {
+	if index < 0 || index >= len(text) {
+		return false
+	}
+	c := text[index]
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	case c >= 0x80:
+		return true
+	}
+	return c == '-' || c == '_' || c == '.' || c == '/' || c == '+' || c == '~' || c == '@' || c == '\\'
 }
 
 // snapshotLines splits a joined snapshot and drops empty records: an empty
@@ -545,5 +603,35 @@ func TestSafeFailureInvariantDetectsModeOnlyDamage(t *testing.T) {
 	}
 	if namesResidue("F /home/item mode=0644 cloud", errors.New("left at /home/other")) {
 		t.Fatal("namesResidue must not match an unrelated path")
+	}
+}
+
+// TestNamesResidueRequiresTheExactPath pins the boundary rule of the safe
+// failure invariant: a residue is tolerated only when the error names that
+// path, not a longer path that merely starts with it. Without this the
+// substring match a truncated field would allow goes unnoticed.
+func TestNamesResidueRequiresTheExactPath(t *testing.T) {
+	line := "F world/keep mode=-rw-r--r--"
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"exact absolute", errors.New(`rollback failed: /tmp/world/keep`), true},
+		{"quoted", fmt.Errorf("left behind %q", "/tmp/world/keep"), true},
+		{"longer path", errors.New("rollback failed: /tmp/world/keeper"), false},
+		{"child path", errors.New("rollback failed: /tmp/world/keep/nested"), false},
+		{"other file", errors.New("rollback failed: /tmp/world/other"), false},
+		{"nil error", nil, false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := namesResidue(line, testCase.err); got != testCase.want {
+				t.Fatalf("namesResidue(%q, %v) = %v, want %v", line, testCase.err, got, testCase.want)
+			}
+		})
+	}
+	if namesResidue("mode=0644", errors.New("/tmp/x")) {
+		t.Fatal("a line without a path must never match")
 	}
 }

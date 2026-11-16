@@ -1,0 +1,74 @@
+package store
+
+import (
+	"database/sql"
+	"reflect"
+	"testing"
+)
+
+// seamAddress returns the code pointer of fn, which is how the seam guards in
+// this repository compare a package-level variable with the real call.
+func seamAddress(fn any) uintptr {
+	return reflect.ValueOf(fn).Pointer()
+}
+
+// TestSeamsDefaultToRealCalls keeps every seam in this package honest: a seam
+// whose default is not the real call would let the tests pass while production
+// took a different path. Add a seam here when you add one to the package.
+func TestSeamsDefaultToRealCalls(t *testing.T) {
+	// execHook and scanReplacementHook are injection points only: production
+	// must leave them nil so no hook can silently divert a real call.
+	if execHook != nil {
+		t.Error("execHook is not nil in production")
+	}
+	if scanReplacementHook != nil {
+		t.Error("scanReplacementHook is not nil in production")
+	}
+	// scanColumns is a seam over a real call, so its default must be that call.
+	if got, want := seamAddress(scanColumns), seamAddress((*sql.Rows).Columns); got != want {
+		t.Errorf("scanColumns = %#x, want (*sql.Rows).Columns %#x", got, want)
+	}
+
+	// execHook is nil in production; when a test installs it the hook must be
+	// the function the seam calls. Prove that by observing the callback.
+	called := ""
+	execHook = func(query string) error { called = query; return nil }
+	t.Cleanup(func() { execHook = nil })
+	if err := execHookError("probe"); err != nil {
+		t.Fatalf("execHookError: %v", err)
+	}
+	if called != "probe" {
+		t.Fatalf("hook called with %q, want probe", called)
+	}
+
+	// scanReplacementHook is nil in production; the seam must return nil, and
+	// a replacement once installed.
+	if scanReplacement() != nil {
+		t.Fatal("scanReplacement returned a scanner without a hook")
+	}
+	installed := errScanner{err: errString("probe")}
+	scanReplacementHook = func() rowScanner { return installed }
+	t.Cleanup(func() { scanReplacementHook = nil })
+	if got := scanReplacement(); got != installed {
+		t.Fatalf("scanReplacement = %v, want the installed scanner", got)
+	}
+
+	// scanColumns must still describe a real result set.
+	db, _ := openTemp(t)
+	path := "/tmp/seams"
+	if err := db.AddEntry("zshrc", &path, "file", "linked"); err != nil {
+		t.Fatalf("AddEntry: %v", err)
+	}
+	rows, err := db.sql.Query(selectAll)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	defer rows.Close()
+	columns, err := scanColumns(rows)
+	if err != nil {
+		t.Fatalf("scanColumns: %v", err)
+	}
+	if !reflect.DeepEqual(columns, schemaColumns) {
+		t.Fatalf("columns = %v, want %v", columns, schemaColumns)
+	}
+}

@@ -86,6 +86,8 @@ ianchor add ~/.config/alacritty
 
 Unless `--name` is provided, the leading dot is stripped: `~/.zshrc` is tracked as `zshrc`. Use the names shown by `ianchor list` in subsequent commands; existing entries are not renamed automatically.
 
+If an entry with that name is still tracked but its iCloud copy is missing, `add` fails and says the name is still tracked instead of keeping the old entry's original path. Use `ianchor add --force` to take over the entry, or `ianchor remove <name>` first.
+
 ### List tracked configs
 
 ```bash
@@ -115,6 +117,8 @@ ianchor relink zshrc
 ### Remove a tracked file
 
 **This deletes the shared iCloud file and database entry, breaking links on other devices. Use `recover` to stop syncing on this device only.**
+
+If a legacy entry's original path points inside the iCloud sync directory or another unsafe location, `remove` refuses the whole operation and touches neither the cloud data nor the database; fix that entry's original path first.
 
 ```bash
 ianchor remove zshrc

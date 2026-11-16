@@ -86,6 +86,8 @@ ianchor add ~/.config/alacritty
 
 未指定 `--name` 时，名称开头的点会被移除，例如 `~/.zshrc` 的追踪名称为 `zshrc`。后续命令请使用 `ianchor list` 显示的名称；已有条目的名称不会自动更改。
 
+若同名记录仍在数据库中、但 iCloud 中的对应文件已丢失，`add` 会报错提示该名称仍被追踪，不会沿用旧记录的原始路径。此时用 `ianchor add --force` 接管该条目，或先执行 `ianchor remove <name>`。
+
 ### 查看已追踪的配置
 
 ```bash
@@ -115,6 +117,8 @@ ianchor relink zshrc
 ### 移除追踪
 
 从数据库中删除记录并删除 iCloud 中的文件。**这是全局删除，会导致其他设备指向该文件的链接失效；仅需当前设备退出同步时，请使用 `recover`。**
+
+若旧记录的原始路径指向 iCloud 同步目录内部或其他危险位置（例如旧版本留下的异常数据），`remove` 会整体拒绝且不改动云端数据与数据库；请先修正该记录的原始路径后再移除。
 
 ```bash
 ianchor remove zshrc

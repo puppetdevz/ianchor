@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/puppetdevz/ianchor/internal/fsx"
+	"github.com/puppetdevz/ianchor/internal/store"
 	"golang.org/x/sys/unix"
 )
 
@@ -149,6 +150,15 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 		t.Errorf("chmodFile left mode %v, %v", info.Mode().Perm(), statErr)
 	}
 
+	// opHook is an injection point only: production must leave it nil so no
+	// hook can divert a destructive operation.
+	if opHook != nil {
+		t.Error("opHook is not nil in production")
+	}
+	if err := checkOp("rename", "/probe"); err != nil {
+		t.Errorf("checkOp with no hook = %v, want nil", err)
+	}
+
 	// renameDirect and dbAllEntries are closures, so only behaviour proves
 	// they still do the real work.
 	from := filepath.Join(dir, "rename-from")
@@ -160,6 +170,25 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 		t.Errorf("renameDirect: %v", err)
 	} else if _, statErr := os.Stat(to); statErr != nil {
 		t.Errorf("renameDirect did not move the entry: %v", statErr)
+	}
+
+	// dbAllEntries must still be the real listing, not a stub returning nil.
+	dbDir := t.TempDir()
+	db, err := store.Open(dbDir)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer db.Close()
+	original := "/probe/path"
+	if err := db.AddEntry("probe", &original, "file", "linked"); err != nil {
+		t.Fatalf("AddEntry: %v", err)
+	}
+	listed, err := dbAllEntries(db)
+	if err != nil {
+		t.Fatalf("dbAllEntries: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Name != "probe" || listed[0].OriginalPath == nil || *listed[0].OriginalPath != original {
+		t.Fatalf("dbAllEntries = %+v, want the stored probe row", listed)
 	}
 
 	// manifestRestore / manifestVerify must really drive the manifest.

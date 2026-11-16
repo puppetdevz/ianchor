@@ -20,6 +20,7 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 		"setTerminalMode": {seamAddress(setTerminalMode), seamAddress(unix.IoctlSetTermios)},
 		"signalProcess":   {seamAddress(signalProcess), seamAddress(syscall.Kill)},
 		"watchResize":     {seamAddress(watchResize), seamAddress(watchTerminalResize)},
+		"pollEscapeInput": {seamAddress(pollEscapeInput), seamAddress(unix.Poll)},
 	}
 	for name, pair := range direct {
 		if pair[0] != pair[1] {

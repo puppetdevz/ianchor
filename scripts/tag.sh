@@ -28,8 +28,10 @@ if [ "$BRANCH" != "main" ]; then
   exit 1
 fi
 
-# Ensure working tree is clean
-if [ -n "$(git status --porcelain)" ]; then
+# Ensure the tracked working tree is clean. Untracked files cannot change the
+# commit the tag points at, and publish.sh applies the same rule; a stray local
+# note must not block a release.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "Error: working tree is not clean. Commit or stash changes first."
   exit 1
 fi

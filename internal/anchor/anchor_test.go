@@ -375,6 +375,10 @@ func TestForceTakeoverPreservesUnrelatedOldOriginal(t *testing.T) {
 				writeFile(t, old, "untouched")
 			}
 			before := f.mustEntry("entry")
+			// datetime('now') has one-second granularity, so a takeover in the
+			// same second cannot be told from a copied stamp. Waiting past the
+			// next second makes "updated_at is new" a real assertion.
+			time.Sleep(1100 * time.Millisecond)
 			newSource := filepath.Join(t.TempDir(), "dir")
 			writeFile(t, filepath.Join(newSource, "config"), "new")
 			if _, err := f.add(newSource, "entry", true); err != nil {
@@ -392,9 +396,8 @@ func TestForceTakeoverPreservesUnrelatedOldOriginal(t *testing.T) {
 			}
 			// Both columns come from SQLite datetime('now'), so a takeover that
 			// merely copied a non-empty string would still pass an emptiness
-			// check. Parse them in the store's format and require a sane order,
-			// and require the takeover to have stamped an update at or after the
-			// moment the row was created.
+			// check. Parse them in the store's format and require the takeover
+			// to have stamped a later update than created_at.
 			created, err := time.Parse(sqliteTime, *before.CreatedAt)
 			if err != nil {
 				t.Fatalf("created_at %q: %v", *before.CreatedAt, err)
@@ -403,8 +406,8 @@ func TestForceTakeoverPreservesUnrelatedOldOriginal(t *testing.T) {
 			if err != nil {
 				t.Fatalf("updated_at %q: %v", *after.UpdatedAt, err)
 			}
-			if updated.Before(created) {
-				t.Fatalf("updated_at %s is before created_at %s", updated, created)
+			if !updated.After(created) {
+				t.Fatalf("updated_at %s was not stamped after created_at %s, so the takeover did not update the row", updated, created)
 			}
 			if latest := time.Now().Add(2 * time.Second); updated.After(latest) {
 				t.Fatalf("updated_at %s is in the future", updated)

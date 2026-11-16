@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -595,5 +597,347 @@ func TestMissingAndReadonlyStoreBranches(t *testing.T) {
 		if err := call(); err == nil || !strings.Contains(err.Error(), "readonly") {
 			t.Fatalf("readonly err=%v", err)
 		}
+	}
+}
+
+// TestAllEntriesReportsExtraColumnsInOrder proves the list payload keeps the
+// SELECT * semantics of the Node implementation: a column added by a future
+// version is reported, in column order, instead of being dropped by a fixed
+// struct shape.
+func TestAllEntriesReportsExtraColumnsInOrder(t *testing.T) {
+	db, _ := openTemp(t)
+	path := "/tmp/extra"
+	if err := db.AddEntry("zshrc", &path, "file", "linked"); err != nil {
+		t.Fatalf("AddEntry: %v", err)
+	}
+	if _, err := db.sql.Exec(`ALTER TABLE entries ADD COLUMN note TEXT`); err != nil {
+		t.Fatalf("ALTER TABLE: %v", err)
+	}
+	if _, err := db.sql.Exec(`UPDATE entries SET note = 'kept'`); err != nil {
+		t.Fatalf("UPDATE note: %v", err)
+	}
+	entries, err := db.AllEntries()
+	if err != nil {
+		t.Fatalf("AllEntries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(entries))
+	}
+	encoded, err := json.Marshal(entries[0])
+	if err != nil {
+		t.Fatalf("Marshal entry: %v", err)
+	}
+	want := `{"id":1,"name":"zshrc","original_path":"/tmp/extra","type":"file","status":"linked","created_at":"` +
+		*entries[0].CreatedAt + `","updated_at":"` + *entries[0].UpdatedAt + `","note":"kept"}`
+	if string(encoded) != want {
+		t.Fatalf("entry JSON =\n%s\nwant\n%s", encoded, want)
+	}
+	entry, err := db.GetEntry("zshrc")
+	if err != nil {
+		t.Fatalf("GetEntry: %v", err)
+	}
+	single, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("Marshal single: %v", err)
+	}
+	if string(single) != want {
+		t.Fatalf("GetEntry JSON =\n%s\nwant\n%s", single, want)
+	}
+}
+
+// TestEntryMarshalUsesSchemaColumnsWhenBuiltInCode covers entries that never
+// came from a row: they still marshal in schema order.
+func TestEntryMarshalUsesSchemaColumnsWhenBuiltInCode(t *testing.T) {
+	entry := Entry{ID: 7, Name: "vimrc", Type: "file", Status: "linked"}
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	want := `{"id":7,"name":"vimrc","original_path":null,"type":"file","status":"linked","created_at":null,"updated_at":null}`
+	if string(encoded) != want {
+		t.Fatalf("JSON = %s, want %s", encoded, want)
+	}
+}
+
+// TestEntryJSONMatchesNodeDriverValues pins the payload for a database carrying
+// columns beyond the schema, against output captured from the Node
+// implementation (better-sqlite3 12.10.0): opacity bytes become a Buffer, a
+// column declared DATETIME keeps its stored text, integers past 2^53 round like
+// a JavaScript number, infinity becomes null, and numeric column names are
+// enumerated before the rest.
+func TestEntryJSONMatchesNodeDriverValues(t *testing.T) {
+	db, _ := openTemp(t)
+	for _, statement := range []string{
+		`ALTER TABLE entries ADD COLUMN blob_extra BLOB`,
+		`ALTER TABLE entries ADD COLUMN dt DATETIME`,
+		`ALTER TABLE entries ADD COLUMN "10" TEXT`,
+		`ALTER TABLE entries ADD COLUMN "2" TEXT`,
+		`ALTER TABLE entries ADD COLUMN "01" TEXT`,
+		`ALTER TABLE entries ADD COLUMN big INTEGER`,
+		`ALTER TABLE entries ADD COLUMN inf REAL`,
+		`ALTER TABLE entries ADD COLUMN "ctrl` + "\x01" + `" TEXT`,
+	} {
+		if _, err := db.sql.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	if _, err := db.sql.Exec(`INSERT INTO entries
+		(name, original_path, type, status, blob_extra, dt, "10", "2", "01", big, inf, "ctrl`+"\x01"+`")
+		VALUES ('n1', '/tmp/x', 'file', 'linked', ?, '2024-01-02 03:04:05', 'ten', 'two', 'zero-one', 9007199254740993, ?, 'c')`,
+		[]byte{0, 1, 255}, math.Inf(1)); err != nil {
+		t.Fatalf("insert n1: %v", err)
+	}
+	if _, err := db.sql.Exec(`INSERT INTO entries (name, original_path, type, status, blob_extra)
+		VALUES ('n2', '/tmp/y', 'file', 'linked', ?)`, []byte{}); err != nil {
+		t.Fatalf("insert n2: %v", err)
+	}
+
+	entry, err := db.GetEntry("n1")
+	if err != nil || entry == nil {
+		t.Fatalf("GetEntry: %+v %v", entry, err)
+	}
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	want := `{"2":"two","10":"ten","id":1,"name":"n1","original_path":"/tmp/x",` +
+		`"type":"file","status":"linked","created_at":"` + *entry.CreatedAt +
+		`","updated_at":"` + *entry.UpdatedAt +
+		`","blob_extra":{"type":"Buffer","data":[0,1,255]},"dt":"2024-01-02 03:04:05",` +
+		`"01":"zero-one","big":9007199254740992,"inf":null,"ctrl\u0001":"c"}`
+	if string(encoded) != want {
+		t.Fatalf("GetEntry JSON =\n%s\nwant\n%s", encoded, want)
+	}
+	// The typed fields stay usable: they carry the stored text for ianchor's own
+	// decisions, not the coerced driver value.
+	if entry.Status != "linked" || entry.CreatedAt == nil || *entry.CreatedAt == "" {
+		t.Fatalf("typed fields = %+v", entry)
+	}
+
+	// The list path appends ORDER BY, so it repeats the whole read through the
+	// stored-value statement.
+	entries, err := db.AllEntries()
+	if err != nil {
+		t.Fatalf("AllEntries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(entries))
+	}
+	first, err := json.Marshal(entries[0])
+	if err != nil {
+		t.Fatalf("Marshal first: %v", err)
+	}
+	if string(first) != want {
+		t.Fatalf("list JSON =\n%s\nwant\n%s", first, want)
+	}
+	second, err := json.Marshal(entries[1])
+	if err != nil {
+		t.Fatalf("Marshal second: %v", err)
+	}
+	wantEmpty := `{"2":null,"10":null,"id":2,"name":"n2","original_path":"/tmp/y",` +
+		`"type":"file","status":"linked","created_at":"` + *entries[1].CreatedAt +
+		`","updated_at":"` + *entries[1].UpdatedAt +
+		`","blob_extra":{"type":"Buffer","data":[]},"dt":null,` +
+		`"01":null,"big":null,"inf":null,"ctrl\u0001":null}`
+	if string(second) != wantEmpty {
+		t.Fatalf("empty BLOB JSON =\n%s\nwant\n%s", second, wantEmpty)
+	}
+}
+
+// TestEntryMarshalRejectsUnencodableValue covers a stored value JSON cannot
+// represent: the failure must surface instead of being silently dropped.
+func TestEntryMarshalRejectsUnencodableValue(t *testing.T) {
+	entry := Entry{
+		order: append(append([]string{}, schemaColumns...), "note"),
+		raw:   map[string]any{"note": make(chan int)},
+	}
+	if _, err := json.Marshal(entry); err == nil {
+		t.Fatal("Marshal accepted an unencodable value")
+	}
+}
+
+// TestMarshalKeyKeepsLineSeparators pins that column names are escaped with JSON
+// rules: a control character becomes \u0001, as JSON.stringify writes it, while
+// the line separators stay literal characters because Go would escape them.
+func TestMarshalKeyKeepsLineSeparators(t *testing.T) {
+	if got := string(marshalKey("ctrl\x01")); got != `"ctrl\u0001"` {
+		t.Fatalf("control key = %s", got)
+	}
+	if got := string(marshalKey("a\u2028b")); got != "\"a\u2028b\"" {
+		t.Fatalf("line separator key = %s", got)
+	}
+}
+
+// TestMarshalNodeEncodesBooleansAndNulls covers the value kinds a stored column
+// cannot produce but a caller still can.
+func TestMarshalNodeEncodesBooleansAndNulls(t *testing.T) {
+	missing := (*string)(nil)
+	path := "/tmp/x"
+	for _, testCase := range []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{"bool", true, "true"},
+		{"nil", nil, "null"},
+		{"nil string", missing, "null"},
+		{"string pointer", &path, `"/tmp/x"`},
+		{"nan", math.NaN(), "null"},
+		{"number", 12.5, "12.5"},
+		{"int", int64(7), "7"},
+	} {
+		encoded, err := marshalNode(testCase.value)
+		if err != nil || string(encoded) != testCase.want {
+			t.Fatalf("%s: %s %v, want %s", testCase.name, encoded, err, testCase.want)
+		}
+	}
+}
+
+// TestIsArrayIndex covers the canonical array-index test JavaScript uses to
+// order numeric property names.
+func TestIsArrayIndex(t *testing.T) {
+	for name, want := range map[string]bool{
+		"":              false,
+		"2":             true,
+		"0":             true,
+		"01":            false,
+		"2a":            false,
+		"4294967294":    true,
+		"4294967295":    false,
+		"9999999999999": false,
+		"-1":            false,
+	} {
+		if got := isArrayIndex(name); got != want {
+			t.Fatalf("isArrayIndex(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+// TestStoredValueDecoding covers what the typed fields accept, so a column with
+// an unexpected storage class cannot smuggle a value into ianchor's decisions.
+func TestStoredValueDecoding(t *testing.T) {
+	if got := intValue(3.0); got != 3 {
+		t.Fatalf("intValue(float64) = %d", got)
+	}
+	if got := intValue("3"); got != 0 {
+		t.Fatalf("intValue(string) = %d", got)
+	}
+	if text, ok := textValue([]byte("bytes")); !ok || text != "bytes" {
+		t.Fatalf("textValue(bytes) = %q %v", text, ok)
+	}
+	if _, ok := textValue(nil); ok {
+		t.Fatal("textValue(null) reported a value")
+	}
+	if got := quoteIdentifier(`we"ird`); got != `"we""ird"` {
+		t.Fatalf("quoteIdentifier = %s", got)
+	}
+	if got := (Entry{}).value("note"); got != nil {
+		t.Fatalf("value for an unknown column = %v", got)
+	}
+}
+
+// TestScanColumnsFailureIsReported covers a result set that cannot describe
+// itself, for both read paths, and the empty GetEntry result probe.
+func TestScanColumnsFailureIsReported(t *testing.T) {
+	db, _ := openTemp(t)
+	path := "/tmp/cols"
+	if err := db.AddEntry("zshrc", &path, "file", "linked"); err != nil {
+		t.Fatalf("AddEntry: %v", err)
+	}
+	scanColumns = func(*sql.Rows) ([]string, error) { return nil, errString("forced columns") }
+	t.Cleanup(func() { scanColumns = (*sql.Rows).Columns })
+
+	if _, err := db.GetEntry("zshrc"); err == nil || !strings.Contains(err.Error(), "forced columns") {
+		t.Fatalf("GetEntry error = %v, want forced columns", err)
+	}
+	if _, err := db.AllEntries(); err == nil || !strings.Contains(err.Error(), "forced columns") {
+		t.Fatalf("AllEntries error = %v, want forced columns", err)
+	}
+}
+
+// TestGetEntryEmptyResultReportsRowsError covers the no-row result probe: a
+// failure surfacing while the empty result set is drained must be reported, not
+// turned into a missing entry.
+func TestGetEntryEmptyResultReportsRowsError(t *testing.T) {
+	db, _ := openTemp(t)
+	execHook = func(query string) error {
+		if query == "open rows-err" {
+			return errString("forced empty rows")
+		}
+		return nil
+	}
+	t.Cleanup(func() { execHook = nil })
+	if entry, err := db.GetEntry("absent"); err == nil || !strings.Contains(err.Error(), "forced empty rows") {
+		t.Fatalf("GetEntry = %v, %v, want forced empty rows", entry, err)
+	}
+}
+
+// TestEntryJSONKeepsBlobInKnownColumn covers opaque bytes stored in one of the
+// schema's own columns: the Node implementation spreads the row it read, so the
+// value stays a Buffer instead of becoming text.
+func TestEntryJSONKeepsBlobInKnownColumn(t *testing.T) {
+	db, _ := openTemp(t)
+	if _, err := db.sql.Exec(`INSERT INTO entries (name, original_path, type, status)
+		VALUES ('n1', '/tmp/x', ?, 'linked')`, []byte("bin")); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	entry, err := db.GetEntry("n1")
+	if err != nil || entry == nil {
+		t.Fatalf("GetEntry: %+v %v", entry, err)
+	}
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	want := `{"id":1,"name":"n1","original_path":"/tmp/x","type":{"type":"Buffer","data":[98,105,110]},` +
+		`"status":"linked","created_at":"` + *entry.CreatedAt + `","updated_at":"` + *entry.UpdatedAt + `"}`
+	if string(encoded) != want {
+		t.Fatalf("JSON =\n%s\nwant\n%s", encoded, want)
+	}
+	if entry.Type != "bin" {
+		t.Fatalf("typed type = %q, want the text view", entry.Type)
+	}
+}
+
+// TestEntryJSONAppendsLiveStatusForUppercaseColumns pins what the Node
+// implementation reports for a hand-written schema with uppercase column names,
+// captured from better-sqlite3 12.10.0: the row keeps its own column names, the
+// typed fields stay empty, and the list command's live status is appended.
+func TestEntryJSONAppendsLiveStatusForUppercaseColumns(t *testing.T) {
+	db, _ := openTemp(t)
+	if _, err := db.sql.Exec(`DROP TABLE entries`); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	if _, err := db.sql.Exec(`CREATE TABLE entries (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL UNIQUE,
+		"ORIGINAL_PATH" TEXT,
+		"TYPE" TEXT NOT NULL,
+		"STATUS" TEXT NOT NULL DEFAULT 'linked',
+		"CREATED_AT" TEXT DEFAULT (datetime('now')),
+		"UPDATED_AT" TEXT DEFAULT (datetime('now')))`); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := db.sql.Exec(`INSERT INTO entries (name, ORIGINAL_PATH, TYPE, STATUS)
+		VALUES ('n1', '/tmp/x', 'file', 'linked')`); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	entry, err := db.GetEntry("n1")
+	if err != nil || entry == nil {
+		t.Fatalf("GetEntry: %+v %v", entry, err)
+	}
+	if entry.OriginalPath != nil || entry.Status != "" {
+		t.Fatalf("typed fields = %+v, want empty like Node's row", entry)
+	}
+	entry.Status = "unlinked"
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	want := `{"id":1,"name":"n1","ORIGINAL_PATH":"/tmp/x","TYPE":"file","STATUS":"linked",` +
+		`"CREATED_AT":"` + entry.raw["CREATED_AT"].(string) + `","UPDATED_AT":"` +
+		entry.raw["UPDATED_AT"].(string) + `","status":"unlinked"}`
+	if string(encoded) != want {
+		t.Fatalf("JSON =\n%s\nwant\n%s", encoded, want)
 	}
 }
