@@ -108,14 +108,20 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 		return AddResult{}, fmt.Errorf("\"%s\" is still tracked but its iCloud copy is missing. Use --force to take over the entry, or run \"ianchor remove %s\" first.", destName, destName)
 	}
 	for _, entry := range entries {
-		if entry.Name == destName || !strings.EqualFold(entry.Name, destName) {
+		if entry.Name == destName {
 			continue
 		}
 		// A case-insensitive volume stores one file under several spellings,
-		// so a stale row spelled differently would end up pointing at the copy
-		// this call creates: remove would then move the file that the other
-		// row still tracks (DELTA-019).
-		if fsx.Lexists(filepath.Join(opts.ConfigDir, entry.Name)) {
+		// so a stale row that resolves to the same path would end up pointing
+		// at the copy this call creates: remove would then move the file the
+		// other row still tracks (DELTA-019). The comparison uses the path the
+		// name actually resolves to, so a legacy path-shaped name is checked at
+		// the place it names instead of being skipped.
+		otherPath := cloudPath(opts.ConfigDir, entry.Name)
+		if !strings.EqualFold(otherPath, destPath) {
+			continue
+		}
+		if fsx.Lexists(otherPath) {
 			continue
 		}
 		return AddResult{}, fmt.Errorf("\"%s\" differs only by case from tracked entry \"%s\", which is the same file name on macOS. Run \"ianchor remove %s\" first.", destName, entry.Name, entry.Name)

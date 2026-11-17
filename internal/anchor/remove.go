@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/puppetdevz/ianchor/internal/fsx"
@@ -41,20 +40,35 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 	var root *backupRoot
 	var inBackup bool
 	if fsx.Exists(icloudPath) {
-		// A case-insensitive volume can store the entry under a different
-		// spelling than the row uses. Moving it then deletes the file that the
-		// other row still tracks, so the row's own name must be the one on
-		// disk (DELTA-019).
 		stageIdentity, err = lstatPath(icloudPath)
 		if err != nil {
 			return RemoveResult{}, j.fail(err)
 		}
-		stored, err := storedEntryName(configDir, entry.Name, stageIdentity)
+		// macOS resolves several spellings to one file. Moving the copy is
+		// only safe when no other row tracks it: a case-only rename on disk is
+		// just a different spelling of this entry's file, which stays
+		// removable (DELTA-019).
+		entries, err := dbAllEntries(db)
 		if err != nil {
 			return RemoveResult{}, j.fail(err)
 		}
-		if stored != "" && stored != entry.Name {
-			return RemoveResult{}, j.fail(errorf("Refusing to remove \"%s\": its iCloud copy is stored as \"%s\", which is another entry name for the same file. Run \"ianchor remove %s\" first.", entry.Name, stored, stored))
+		for _, other := range entries {
+			if other.Name == entry.Name {
+				continue
+			}
+			// A legacy path-shaped name is compared where it actually
+			// resolves, so it neither blocks unrelated removals nor slips past
+			// when it names this file.
+			otherInfo, err := lstatPath(cloudPath(configDir, other.Name))
+			if err != nil {
+				if !os.IsNotExist(err) {
+					return RemoveResult{}, j.fail(err)
+				}
+				continue
+			}
+			if os.SameFile(stageIdentity, otherInfo) {
+				return RemoveResult{}, j.fail(errorf("Refusing to remove \"%s\": its iCloud copy is also tracked as entry \"%s\". Run \"ianchor remove %s\" first.", entry.Name, other.Name, other.Name))
+			}
 		}
 		root, err = openBackupRoot(configDir)
 		if err != nil {
@@ -73,7 +87,7 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 			}
 			// A copy cannot reliably restore macOS metadata. Instead stage on
 			// the source volume, preserving the original object for rollback.
-			staged, err = stagingPath(filepath.Dir(icloudPath), name+"-removed")
+			staged, err = stagingPath(filepath.Dir(icloudPath), entry.Name+"-removed")
 			if err != nil {
 				return RemoveResult{}, j.fail(err)
 			}
@@ -140,27 +154,9 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 	return RemoveResult{Name: name, OriginalPath: entry.OriginalPath}, nil
 }
 
-// storedEntryName reports the spelling the config directory actually uses for
-// name. A case-insensitive volume resolves "src_a" to a copy stored as
-// "SRC_A", and removing under the wrong spelling would move the file another
-// row still tracks (DELTA-019). It returns "" when no listed entry resolves to
-// the same file.
-func storedEntryName(configDir, name string, victim os.FileInfo) (string, error) {
-	entries, err := readDirPath(configDir)
-	if err != nil {
-		return "", err
-	}
-	for _, listed := range entries {
-		if listed.Name() != name && !strings.EqualFold(listed.Name(), name) {
-			continue
-		}
-		info, err := lstatPath(filepath.Join(configDir, listed.Name()))
-		if err != nil {
-			continue
-		}
-		if os.SameFile(victim, info) {
-			return listed.Name(), nil
-		}
-	}
-	return "", nil
+// cloudPath resolves a stored name the way every command always has, so a
+// legacy row whose name is path-shaped is compared at the location it actually
+// names rather than at a path this build would reject.
+func cloudPath(configDir, name string) string {
+	return filepath.Clean(filepath.Join(configDir, name))
 }
