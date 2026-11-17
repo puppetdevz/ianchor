@@ -119,15 +119,17 @@ func TestAddForceErrors(t *testing.T) {
 		override(t, &dbAllEntries, func(*store.DB) ([]store.Entry, error) { return nil, errSeam })
 		mustContain(t, addErr(t, w, source, true), errSeam.Error())
 	})
-	t.Run("reserved tracked name", func(t *testing.T) {
+	t.Run("unrelated legacy tracked name", func(t *testing.T) {
 		w, source, dest := addWorld(t, "item")
 		writeFile(t, dest, "existing")
 		original := source
+		// A legacy empty name resolves to the config directory itself, which
+		// is never the destination, so it no longer blocks the takeover.
 		if err := w.db.AddEntry("", &original, "file", "linked"); err != nil {
 			t.Fatal(err)
 		}
-		if err := addErr(t, w, source, true); err == nil {
-			t.Fatal("expected validation failure")
+		if _, err := Add(w.db, AddOptions{ConfigDir: w.configDir, Source: source, Force: true}); err != nil {
+			t.Fatalf("Add() error = %v, want success past an unrelated legacy row", err)
 		}
 	})
 	t.Run("displaced lstat", func(t *testing.T) {

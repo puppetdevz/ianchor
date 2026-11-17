@@ -200,7 +200,7 @@ func TestRemoveRefusesALegacyNameThatNamesThisFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := Remove(w.db, w.configDir, "toolrc")
-	want := `Refusing to remove "toolrc": its iCloud copy is also tracked as entry "../ianchor/toolrc". Run "ianchor remove ../ianchor/toolrc" first.`
+	want := `Refusing to remove "toolrc": its iCloud copy is also tracked as entry "../ianchor/toolrc". Or fix that legacy entry in the database with sqlite3 first.`
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v\nwant  %q", err, want)
 	}
@@ -275,7 +275,7 @@ func TestAddRefusesALegacyNameThatNamesTheNewCopy(t *testing.T) {
 	}
 	source := w.write("first/toolrc", "one")
 	_, err := Add(w.db, AddOptions{ConfigDir: w.configDir, Source: source, Name: "toolrc"})
-	want := `"toolrc" differs only by case from tracked entry "../ianchor/toolrc", which is the same file name on macOS. Run "ianchor remove ../ianchor/toolrc" first.`
+	want := `"toolrc" differs only by case from tracked entry "../ianchor/toolrc", which is the same file name on macOS. Or fix that legacy entry in the database with sqlite3 first.`
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v\nwant  %q", err, want)
 	}

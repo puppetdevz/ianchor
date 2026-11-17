@@ -2,6 +2,7 @@ package anchor
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -67,7 +68,7 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 				continue
 			}
 			if os.SameFile(stageIdentity, otherInfo) {
-				return RemoveResult{}, j.fail(errorf("Refusing to remove \"%s\": its iCloud copy is also tracked as entry \"%s\". Run \"ianchor remove %s\" first.", entry.Name, other.Name, other.Name))
+				return RemoveResult{}, j.fail(errorf("Refusing to remove \"%s\": its iCloud copy is also tracked as entry \"%s\". %s", entry.Name, other.Name, removalHint(other.Name)))
 			}
 		}
 		root, err = openBackupRoot(configDir)
@@ -152,6 +153,15 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 		}
 	}
 	return RemoveResult{Name: name, OriginalPath: entry.OriginalPath}, nil
+}
+
+// removalHint names a step the user can actually take: a legacy path-shaped
+// row is refused by every command, so it has to be corrected in the database.
+func removalHint(name string) string {
+	if ValidateEntryName(name) != nil {
+		return fmt.Sprintf("Or fix that legacy entry in the database with sqlite3 first.")
+	}
+	return fmt.Sprintf("Run \"ianchor remove %s\" first.", name)
 }
 
 // cloudPath resolves a stored name the way every command always has, so a

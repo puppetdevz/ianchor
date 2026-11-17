@@ -124,7 +124,7 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 		if fsx.Lexists(otherPath) {
 			continue
 		}
-		return AddResult{}, fmt.Errorf("\"%s\" differs only by case from tracked entry \"%s\", which is the same file name on macOS. Run \"ianchor remove %s\" first.", destName, entry.Name, entry.Name)
+		return AddResult{}, fmt.Errorf("\"%s\" differs only by case from tracked entry \"%s\", which is the same file name on macOS. %s", destName, entry.Name, removalHint(entry.Name))
 	}
 	if opts.Force && fsx.Lexists(destPath) {
 		destination, err := lstatPath(destPath)
@@ -135,13 +135,10 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 			if entry.Name == destName {
 				continue
 			}
-			// Reserved basenames can safely be inspected for aliases, while
-			// path-shaped legacy names may escape the config directory and
-			// cannot safely be ruled out as aliases.
-			if entry.Name == "" || entry.Name == "." || entry.Name == ".." || strings.ContainsAny(entry.Name, "/\x00") {
-				return AddResult{}, ValidateEntryName(entry.Name)
-			}
-			other, err := lstatPath(filepath.Join(opts.ConfigDir, entry.Name))
+			// Compare where the stored name actually resolves, so one legacy
+			// path-shaped row neither blocks the takeover nor slips past as an
+			// alias of the destination.
+			other, err := lstatPath(cloudPath(opts.ConfigDir, entry.Name))
 			if os.IsNotExist(err) {
 				continue
 			}
