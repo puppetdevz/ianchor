@@ -21,6 +21,8 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 		"signalProcess":   {seamAddress(signalProcess), seamAddress(syscall.Kill)},
 		"watchResize":     {seamAddress(watchResize), seamAddress(watchTerminalResize)},
 		"pollEscapeInput": {seamAddress(pollEscapeInput), seamAddress(unix.Poll)},
+		"signalIgnored":   {seamAddress(signalIgnored), seamAddress(signal.Ignored)},
+		"exitProcess":     {seamAddress(exitProcess), seamAddress(os.Exit)},
 	}
 	for name, pair := range direct {
 		if pair[0] != pair[1] {

@@ -163,6 +163,11 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 		"chmodPrepareRestore":   chmodPrepareRestore,
 	}
 	for name, seam := range chmodSeams {
+		// Each iteration starts from a mode the seam must actually change, so
+		// an earlier real call cannot make a later stub look successful.
+		if err := file.Chmod(0o644); err != nil {
+			t.Fatalf("reset probe mode: %v", err)
+		}
 		if err := seam(file, 0o600); err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue

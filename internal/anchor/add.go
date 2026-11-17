@@ -97,18 +97,31 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 	if err != nil {
 		return AddResult{}, err
 	}
+	entries, err := dbAllEntries(db)
+	if err != nil {
+		return AddResult{}, err
+	}
 	if previous != nil && !opts.Force && !fsx.Lexists(destPath) {
 		// A row without a shared entity would be reused by dbAdd's
 		// INSERT OR IGNORE, keeping the old original_path while this call
 		// creates a symlink for a different path (DELTA-018, REQ-006).
 		return AddResult{}, fmt.Errorf("\"%s\" is still tracked but its iCloud copy is missing. Use --force to take over the entry, or run \"ianchor remove %s\" first.", destName, destName)
 	}
+	for _, entry := range entries {
+		if entry.Name == destName || !strings.EqualFold(entry.Name, destName) {
+			continue
+		}
+		// A case-insensitive volume stores one file under several spellings,
+		// so a stale row spelled differently would end up pointing at the copy
+		// this call creates: remove would then move the file that the other
+		// row still tracks (DELTA-019).
+		if fsx.Lexists(filepath.Join(opts.ConfigDir, entry.Name)) {
+			continue
+		}
+		return AddResult{}, fmt.Errorf("\"%s\" differs only by case from tracked entry \"%s\", which is the same file name on macOS. Run \"ianchor remove %s\" first.", destName, entry.Name, entry.Name)
+	}
 	if opts.Force && fsx.Lexists(destPath) {
 		destination, err := lstatPath(destPath)
-		if err != nil {
-			return AddResult{}, err
-		}
-		entries, err := dbAllEntries(db)
 		if err != nil {
 			return AddResult{}, err
 		}

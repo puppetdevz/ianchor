@@ -84,7 +84,19 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 			t.Errorf("%s open: %v", name, err)
 			continue
 		}
+		if file == nil {
+			t.Errorf("%s returned no handle", name)
+			continue
+		}
+		// A stub returning (nil, nil) or another entry's handle must not pass.
+		opened, statErr := file.Stat()
 		file.Close()
+		if statErr != nil || !os.SameFile(opened, want) {
+			t.Errorf("%s opened something else: %v", name, statErr)
+		}
+		if _, err := seam(root, "missing"); err == nil {
+			t.Errorf("%s opened a missing name", name)
+		}
 	}
 	child, err := rootOpenRoot(root, ".")
 	if err != nil {
@@ -210,10 +222,26 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 		t.Fatalf("manifest.Record: %v", err)
 	}
 	manifestFile.Close()
+	// A stub that reports success without touching the filesystem must fail:
+	// Restore has to rewrite the recorded mode, and VerifyAccessible has to
+	// notice a copy the process can no longer read.
+	if err := mRoot.Chmod("node", 0o644); err != nil {
+		t.Fatalf("chmod probe: %v", err)
+	}
 	if err := manifestRestore(manifest, mRoot); err != nil {
 		t.Errorf("manifestRestore: %v", err)
 	}
+	if info, err := mRoot.Lstat("node"); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("manifestRestore left mode %v, %v, want 0600", info, err)
+	}
 	if err := manifestVerify(manifest, mRoot); err != nil {
-		t.Errorf("manifestVerify: %v", err)
+		t.Errorf("manifestVerify on an accessible copy: %v", err)
+	}
+	requireUnprivileged(t)
+	if err := mRoot.Chmod("node", 0o000); err != nil {
+		t.Fatalf("chmod unreadable: %v", err)
+	}
+	if err := manifestVerify(manifest, mRoot); err == nil {
+		t.Error("manifestVerify accepted an unreadable copy")
 	}
 }

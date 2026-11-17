@@ -166,6 +166,10 @@ func (c *Context) Spinner() *Spinner { return c.s.StartSpinner() }
 // the process exit code.
 func Run(root *Command, version string, args []string, in io.Reader, out, errOut io.Writer) int {
 	linkParents(root, nil)
+	// A shell that started ianchor with SIGINT ignored must not make the
+	// command uninterruptible.
+	stopInterrupt := guardInheritedInterrupt()
+	defer stopInterrupt()
 	s := &session{
 		version: version,
 		in:      bufio.NewReader(in),

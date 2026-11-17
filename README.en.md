@@ -88,6 +88,8 @@ Unless `--name` is provided, the leading dot is stripped: `~/.zshrc` is tracked 
 
 If an entry with that name is still tracked but its iCloud copy is missing, `add` fails and says the name is still tracked instead of keeping the old entry's original path. Use `ianchor add --force` to take over the entry, or `ianchor remove <name>` first.
 
+macOS stores one file under several spellings, so a name that differs from a tracked entry only by case is refused: adding it without `--force` while the tracked entry's copy is missing fails and names the tracked entry, and `remove` refuses when the copy on disk is spelled differently from the entry, because deleting it would remove the file the other entry still tracks. Remove the tracked entry first.
+
 ### List tracked configs
 
 ```bash

@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +28,11 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 	// scanColumns is a seam over a real call, so its default must be that call.
 	if got, want := seamAddress(scanColumns), seamAddress((*sql.Rows).Columns); got != want {
 		t.Errorf("scanColumns = %#x, want (*sql.Rows).Columns %#x", got, want)
+	}
+	// storedValueStatement is the same kind of seam: its default must be the
+	// real describer, not a stub that would skip the stored-value re-read.
+	if got, want := seamAddress(storedValueStatement), seamAddress(describeStoredValues); got != want {
+		t.Errorf("storedValueStatement = %#x, want describeStoredValues %#x", got, want)
 	}
 
 	// execHook is nil in production; when a test installs it the hook must be
@@ -63,12 +69,40 @@ func TestSeamsDefaultToRealCalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	defer rows.Close()
 	columns, err := scanColumns(rows)
 	if err != nil {
 		t.Fatalf("scanColumns: %v", err)
 	}
 	if !reflect.DeepEqual(columns, schemaColumns) {
 		t.Fatalf("columns = %v, want %v", columns, schemaColumns)
+	}
+
+	// The real describer must report no rewrite for this schema and a rewrite
+	// for a column whose declared type is a date. Rows are closed first because
+	// SQLite serialises statements on one database file.
+	statement, err := storedValueStatement(columns, rows)
+	if err != nil || statement != "" {
+		t.Fatalf("storedValueStatement = %q, %v, want no rewrite", statement, err)
+	}
+	rows.Close()
+	dated, _ := openTemp(t)
+	if _, err := dated.sql.Exec(`CREATE TABLE dated (id INTEGER PRIMARY KEY, stamp DATETIME)`); err != nil {
+		t.Fatalf("create dated table: %v", err)
+	}
+	datedRows, err := dated.sql.Query("SELECT * FROM dated")
+	if err != nil {
+		t.Fatalf("query dated: %v", err)
+	}
+	defer datedRows.Close()
+	datedColumns, err := scanColumns(datedRows)
+	if err != nil {
+		t.Fatalf("dated columns: %v", err)
+	}
+	statement, err = storedValueStatement(datedColumns, datedRows)
+	if err != nil {
+		t.Fatalf("dated storedValueStatement: %v", err)
+	}
+	if !strings.Contains(statement, "CASE WHEN 1") {
+		t.Fatalf("dated storedValueStatement = %q, want a CASE wrapper", statement)
 	}
 }

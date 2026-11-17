@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -939,5 +940,64 @@ func TestEntryJSONAppendsLiveStatusForUppercaseColumns(t *testing.T) {
 		entry.raw["UPDATED_AT"].(string) + `","status":"unlinked"}`
 	if string(encoded) != want {
 		t.Fatalf("JSON =\n%s\nwant\n%s", encoded, want)
+	}
+}
+
+// TestReadEntriesStopsWhenTheDriverKeepsCoercing proves the stored-value
+// re-read is bounded: a driver that keeps reporting a declared date type makes
+// the read fail instead of looping forever.
+func TestReadEntriesStopsWhenTheDriverKeepsCoercing(t *testing.T) {
+	db, _ := openTemp(t)
+	if _, err := db.sql.Exec(`CREATE TABLE dated (id INTEGER PRIMARY KEY, stamp DATETIME)`); err != nil {
+		t.Fatalf("create dated table: %v", err)
+	}
+	original := storedValueStatement
+	storedValueStatement = func([]string, *sql.Rows) (string, error) {
+		return "SELECT * FROM entries", nil
+	}
+	t.Cleanup(func() { storedValueStatement = original })
+	entries, err := db.readEntries("")
+	if err == nil {
+		t.Fatalf("readEntries = %v, want a bounded-read failure", entries)
+	}
+	if !strings.Contains(err.Error(), "declared date type after 2 reads") {
+		t.Fatalf("readEntries error = %v, want the retry bound", err)
+	}
+}
+
+// TestStoredValuesReportColumnTypeFailure proves a driver that cannot describe
+// its result set surfaces as an error instead of a silently converted column.
+func TestStoredValuesReportColumnTypeFailure(t *testing.T) {
+	db, _ := openTemp(t)
+	rows, err := db.sql.Query(selectAll)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	columns, err := scanColumns(rows)
+	if err != nil {
+		t.Fatalf("scanColumns: %v", err)
+	}
+	rows.Close()
+	if _, err := describeStoredValues(columns, rows); err == nil {
+		t.Fatal("describeStoredValues accepted a closed result set")
+	}
+}
+
+// TestReadEntriesReportsStoredValueStatementFailures pins the error branch
+// above the re-read: a descriptor that cannot describe the stored values must
+// fail the read instead of being treated as "no coercion needed".
+func TestReadEntriesReportsStoredValueStatementFailures(t *testing.T) {
+	db, _ := openTemp(t)
+	original := storedValueStatement
+	storedValueStatement = func([]string, *sql.Rows) (string, error) {
+		return "", errors.New("statement refused")
+	}
+	t.Cleanup(func() { storedValueStatement = original })
+	entries, err := db.readEntries("")
+	if err == nil {
+		t.Fatalf("readEntries = %v, want the descriptor failure", entries)
+	}
+	if !strings.Contains(err.Error(), "statement refused") {
+		t.Fatalf("readEntries error = %v, want the seam's error", err)
 	}
 }

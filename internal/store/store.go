@@ -428,13 +428,14 @@ func (db *DB) AllEntries() ([]Entry, error) {
 // that keeps them, because the Node driver reports the stored text.
 func (db *DB) readEntries(where string, args ...any) ([]Entry, error) {
 	statement := selectAll + where
-	for {
+	for attempt := 0; attempt < maxStoredValueReads; attempt++ {
 		entries, storedValues, err := db.queryEntries(statement, args...)
 		if err != nil || storedValues == "" {
 			return entries, err
 		}
 		statement = storedValues + where
 	}
+	return nil, NormalizeError(fmt.Errorf("entries still carry a declared date type after %d reads", maxStoredValueReads))
 }
 
 // queryEntries runs one statement. When its result set would lose stored values
@@ -450,7 +451,11 @@ func (db *DB) queryEntries(statement string, args ...any) ([]Entry, string, erro
 	if err != nil {
 		return nil, "", NormalizeError(err)
 	}
-	if storedValues := storedValueStatement(columns, rows); storedValues != "" {
+	storedValues, err := storedValueStatement(columns, rows)
+	if err != nil {
+		return nil, "", err
+	}
+	if storedValues != "" {
 		return nil, storedValues, nil
 	}
 	entries := []Entry{}
@@ -481,8 +486,15 @@ func (db *DB) queryEntries(statement string, args ...any) ([]Entry, string, erro
 // the driver's date coercion, or "" when the statement reports stored values
 // already. A CASE expression has no declared type, so SQLite hands back the
 // stored text for a column declared DATE, DATETIME or TIMESTAMP.
-func storedValueStatement(columns []string, rows *sql.Rows) string {
-	columnTypes, _ := rows.ColumnTypes()
+// maxStoredValueReads bounds the re-read so a driver that keeps reporting a
+// declared date type fails loudly instead of looping.
+const maxStoredValueReads = 2
+
+func describeStoredValues(columns []string, rows *sql.Rows) (string, error) {
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return "", NormalizeError(err)
+	}
 	wrapped := make([]bool, len(columns))
 	coerced := false
 	for i, columnType := range columnTypes {
@@ -493,7 +505,7 @@ func storedValueStatement(columns []string, rows *sql.Rows) string {
 		}
 	}
 	if !coerced {
-		return ""
+		return "", nil
 	}
 	parts := make([]string, len(columns))
 	for i, column := range columns {
@@ -504,8 +516,12 @@ func storedValueStatement(columns []string, rows *sql.Rows) string {
 		}
 		parts[i] = fmt.Sprintf("%s AS %s", identifier, identifier)
 	}
-	return "SELECT " + strings.Join(parts, ", ") + " FROM entries"
+	return "SELECT " + strings.Join(parts, ", ") + " FROM entries", nil
 }
+
+// storedValueStatement is a package-level variable so the bounded retry can be
+// exercised when a driver keeps coercing a declared date type.
+var storedValueStatement = describeStoredValues
 
 // quoteIdentifier quotes a column name for SQL, doubling embedded quotes like
 // the SQL standard requires.
