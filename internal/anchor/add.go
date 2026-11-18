@@ -35,6 +35,12 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 	if err != nil {
 		return AddResult{}, err
 	}
+	if err := validateCoordinatorPath(resolved, true); err != nil {
+		return AddResult{}, err
+	}
+	if err := validateCoordinatorPath(opts.ConfigDir, true); err != nil {
+		return AddResult{}, err
+	}
 	if !fsx.Exists(resolved) {
 		return AddResult{}, fmt.Errorf("Source \"%s\" does not exist.", resolved)
 	}

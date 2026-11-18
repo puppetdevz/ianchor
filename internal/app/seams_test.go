@@ -8,6 +8,8 @@ import (
 
 	"github.com/puppetdevz/ianchor/internal/anchor"
 	"github.com/puppetdevz/ianchor/internal/completions"
+	"github.com/puppetdevz/ianchor/internal/config"
+	"github.com/puppetdevz/ianchor/internal/coordinator"
 	"github.com/puppetdevz/ianchor/internal/store"
 )
 
@@ -17,9 +19,13 @@ import (
 // quietly became a stub would make the shipped code differ from the tested one.
 func TestSeamsDefaultToRealCalls(t *testing.T) {
 	direct := map[string][2]uintptr{
-		"openDBFunc":       {reflect.ValueOf(openDBFunc).Pointer(), reflect.ValueOf(store.Open).Pointer()},
-		"listEntries":      {reflect.ValueOf(listEntries).Pointer(), reflect.ValueOf(anchor.List).Pointer()},
-		"completionScript": {reflect.ValueOf(completionScript).Pointer(), reflect.ValueOf(completions.Script).Pointer()},
+		"resolveConfigDir":          {reflect.ValueOf(resolveConfigDir).Pointer(), reflect.ValueOf(config.GetConfigDir).Pointer()},
+		"resolveConfigFile":         {reflect.ValueOf(resolveConfigFile).Pointer(), reflect.ValueOf(config.FilePath).Pointer()},
+		"validateCoordinatorConfig": {reflect.ValueOf(validateCoordinatorConfig).Pointer(), reflect.ValueOf(anchor.ValidateCoordinatorConfig).Pointer()},
+		"localCoordinatorDirectory": {reflect.ValueOf(localCoordinatorDirectory).Pointer(), reflect.ValueOf(coordinator.Directory).Pointer()},
+		"openDBFunc":                {reflect.ValueOf(openDBFunc).Pointer(), reflect.ValueOf(store.Open).Pointer()},
+		"listEntries":               {reflect.ValueOf(listEntries).Pointer(), reflect.ValueOf(anchor.List).Pointer()},
+		"completionScript":          {reflect.ValueOf(completionScript).Pointer(), reflect.ValueOf(completions.Script).Pointer()},
 	}
 	for name, pair := range direct {
 		if pair[0] != pair[1] {

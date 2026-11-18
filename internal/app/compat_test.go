@@ -227,7 +227,7 @@ func run(t *testing.T, home string, c compatCase) expectation {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	useHome(t, home)
-	code := cli.Run(app.New(), ianchor.Version, c.Args, strings.NewReader(c.Stdin), &stdout, &stderr)
+	code := cli.Run(app.NewWithCoordinator(testCoordinator), ianchor.Version, c.Args, strings.NewReader(c.Stdin), &stdout, &stderr)
 	started, ok := homeStarted.Load(home)
 	if !ok {
 		t.Fatal("missing HOME start time")

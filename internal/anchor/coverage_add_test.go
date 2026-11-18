@@ -61,10 +61,12 @@ func TestAddEarlyErrors(t *testing.T) {
 	t.Run("identity overlap", func(t *testing.T) {
 		w, source, _ := addWorld(t, "item")
 		realStat := statPath
-		calls := 0
+		physicalConfig, err := filepath.EvalSymlinks(w.configDir)
+		if err != nil {
+			t.Fatal(err)
+		}
 		override(t, &statPath, func(path string) (os.FileInfo, error) {
-			calls++
-			if calls == 2 {
+			if path == physicalConfig {
 				return nil, errSeam
 			}
 			return realStat(path)

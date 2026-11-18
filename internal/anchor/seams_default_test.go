@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/puppetdevz/ianchor/internal/coordinator"
 	"github.com/puppetdevz/ianchor/internal/fsx"
 	"github.com/puppetdevz/ianchor/internal/store"
 	"golang.org/x/sys/unix"
@@ -20,6 +21,7 @@ func seamAddress(fn any) uintptr { return reflect.ValueOf(fn).Pointer() }
 // shipped behaviour.
 func TestSeamsDefaultToRealCalls(t *testing.T) {
 	direct := map[string][2]uintptr{
+		"coordinatorDirectory":       {seamAddress(originalCoordinatorDirectory), seamAddress(coordinator.Directory)},
 		"evalSymlinksPath":           {seamAddress(evalSymlinksPath), seamAddress(filepath.EvalSymlinks)},
 		"lstatPath":                  {seamAddress(lstatPath), seamAddress(os.Lstat)},
 		"statPath":                   {seamAddress(statPath), seamAddress(os.Stat)},

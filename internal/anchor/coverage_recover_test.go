@@ -477,6 +477,8 @@ func TestRecoverPostCopyFailures(t *testing.T) {
 		mustContain(t, recoverFailSafely(t, f, true), errSeam.Error())
 	})
 	t.Run("copy replaced", func(t *testing.T) {
+		missingCoordinator := filepath.Join(t.TempDir(), "absent")
+		override(t, &coordinatorDirectory, func() string { return missingCoordinator })
 		f := forceLocal(t)
 		realLstat := lstatPath
 		calls := 0
@@ -559,6 +561,8 @@ func TestRecoverLateFailures(t *testing.T) {
 		mustContain(t, recoverFailSafely(t, f, false), errSeam.Error())
 	})
 	t.Run("late parent detached", func(t *testing.T) {
+		missingCoordinator := filepath.Join(t.TempDir(), "absent")
+		override(t, &coordinatorDirectory, func() string { return missingCoordinator })
 		f := newRecoverFixture(t)
 		realStat := statPath
 		calls := 0

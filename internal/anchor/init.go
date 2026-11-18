@@ -39,6 +39,9 @@ type InitResult struct {
 // Init creates the iCloud config directory, opens the database and records any
 // config files that were moved there before ianchor knew about them.
 func Init(icloudBase, dirName string) (InitResult, error) {
+	if err := validateCoordinatorPath(icloudBase, true); err != nil {
+		return InitResult{}, err
+	}
 	configDir, err := config.EnsureConfigDir(icloudBase, dirName)
 	if err != nil {
 		return InitResult{}, err

@@ -13,7 +13,7 @@ import (
 
 func runApp(args []string) (int, string, string) {
 	var out, errOut strings.Builder
-	code := cli.Run(New(), "1.1.1", args, strings.NewReader(""), &out, &errOut)
+	code := cli.Run(NewWithCoordinator(func() (func() error, error) { return func() error { return nil }, nil }), "1.1.1", args, strings.NewReader(""), &out, &errOut)
 	return code, out.String(), errOut.String()
 }
 

@@ -14,7 +14,7 @@ import (
 
 func runCLI(args []string, stdin string) (int, string, string) {
 	var out, errOut bytes.Buffer
-	code := cli.Run(app.New(), "1.1.1", args, strings.NewReader(stdin), &out, &errOut)
+	code := cli.Run(app.NewWithCoordinator(testCoordinator), "1.1.1", args, strings.NewReader(stdin), &out, &errOut)
 	return code, out.String(), errOut.String()
 }
 

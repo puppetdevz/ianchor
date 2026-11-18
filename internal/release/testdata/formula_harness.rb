@@ -72,7 +72,12 @@ formula.install
 old_path = ENV.fetch("PATH", "")
 begin
   ENV["PATH"] = File.join(ARGV.fetch(1), "empty-runtime-path")
-  formula.instance_exec(&Ianchor.test_block)
+  if ARGV[2] == "install-only"
+    version, status = Open3.capture2e((formula.bin/"ianchor").to_s, "--version")
+    raise "installed version mismatch: #{version}" unless status.success? && version.include?(formula.version.to_s)
+  else
+    formula.instance_exec(&Ianchor.test_block)
+  end
 ensure
   ENV["PATH"] = old_path
 end

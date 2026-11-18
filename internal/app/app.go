@@ -4,6 +4,7 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/puppetdevz/ianchor/internal/cli"
 	"github.com/puppetdevz/ianchor/internal/completions"
 	"github.com/puppetdevz/ianchor/internal/config"
+	"github.com/puppetdevz/ianchor/internal/coordinator"
 	"github.com/puppetdevz/ianchor/internal/store"
 	"github.com/puppetdevz/ianchor/internal/table"
 )
@@ -42,8 +44,38 @@ func javascriptJSONSeparators(input string) string {
 	return out.String()
 }
 
-// New builds the command tree.
+var localCoordinatorDirectory = coordinator.Directory
+
+func acquireLocalLease() (func() error, error) {
+	lease, err := coordinator.AcquireIn(localCoordinatorDirectory())
+	if err != nil {
+		return nil, err
+	}
+	return lease.Close, nil
+}
+
+// New builds the command tree with local operation coordination.
 func New() *cli.Command {
+	return NewWithCoordinator(acquireLocalLease)
+}
+
+// NewWithCoordinator builds a command tree using the supplied lease factory.
+// It permits isolated callers and tests to supply their own coordination.
+func NewWithCoordinator(acquire func() (func() error, error)) *cli.Command {
+	wrap := func(action func(*cli.Context) error) func(*cli.Context) error {
+		return func(ctx *cli.Context) (result error) {
+			release, err := acquire()
+			if err != nil {
+				return fmt.Errorf("cannot acquire local operation lock: %w", err)
+			}
+			defer func() {
+				if err := release(); err != nil {
+					result = errors.Join(result, fmt.Errorf("operation may have completed but local lock release failed: %w", err))
+				}
+			}()
+			return action(ctx)
+		}
+	}
 	return &cli.Command{
 		Name: "ianchor",
 		Desc: "Sync config files to iCloud Drive via symlinks",
@@ -57,7 +89,7 @@ func New() *cli.Command {
 				Options: []*cli.Option{
 					{Long: "--dir", Value: "<name>", Desc: "config directory name in iCloud Drive"},
 				},
-				Action: runInit,
+				Action: wrap(runInit),
 			},
 			{
 				Name: "list",
@@ -65,7 +97,7 @@ func New() *cli.Command {
 				Options: []*cli.Option{
 					{Long: "--json", Desc: "output as JSON"},
 				},
-				Action: runList,
+				Action: wrap(runList),
 			},
 			{
 				Name: "add",
@@ -75,7 +107,7 @@ func New() *cli.Command {
 					{Long: "--name", Value: "<name>", Desc: "custom name in iCloud directory"},
 					{Long: "--force", Desc: "overwrite if already exists", DefaultDisplay: "false"},
 				},
-				Action: runAdd,
+				Action: wrap(runAdd),
 			},
 			{
 				Name: "recover",
@@ -84,13 +116,13 @@ func New() *cli.Command {
 				Options: []*cli.Option{
 					{Long: "--force", Desc: "overwrite if file exists at original location", DefaultDisplay: "false"},
 				},
-				Action: runRecover,
+				Action: wrap(runRecover),
 			},
 			{
 				Name:   "relink",
 				Desc:   "Re-create symlink for an unlinked file in iCloud",
 				Args:   []*cli.Arg{{Name: "name", Required: true}},
-				Action: runRelink,
+				Action: wrap(runRelink),
 			},
 			{
 				Name: "remove",
@@ -99,7 +131,7 @@ func New() *cli.Command {
 				Options: []*cli.Option{
 					{Short: "-y", Long: "--yes", Desc: "skip confirmation", DefaultDisplay: "false"},
 				},
-				Action: runRemove,
+				Action: wrap(runRemove),
 			},
 			{
 				Name:   "__complete",
@@ -120,6 +152,9 @@ func New() *cli.Command {
 }
 
 var openDBFunc = store.Open
+var resolveConfigDir = config.GetConfigDir
+var resolveConfigFile = config.FilePath
+var validateCoordinatorConfig = anchor.ValidateCoordinatorConfig
 
 func configDir() (string, error) {
 	cfg := config.Load()
@@ -131,7 +166,14 @@ func configDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return config.GetConfigDir(base, dirName)
+	dir, err := resolveConfigDir(base, dirName)
+	if err != nil {
+		return "", err
+	}
+	if err := validateCoordinatorConfig(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
 }
 
 func openDB(dir string) (*store.DB, error) { return openDBFunc(dir) }
@@ -181,6 +223,13 @@ func runInit(ctx *cli.Context) error {
 		}
 	}
 	if err := config.ValidateDirName(dirName); err != nil {
+		return err
+	}
+	configFile, err := resolveConfigFile()
+	if err != nil {
+		return err
+	}
+	if err := validateCoordinatorConfig(configFile); err != nil {
 		return err
 	}
 	result, err := anchor.Init(icloudBase, dirName)

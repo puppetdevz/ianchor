@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -264,6 +265,34 @@ func TestFormulaInstallAndTestInIsolatedHarness(t *testing.T) {
 	buildSource := filepath.Join(root, "ianchor")
 	formulaPath := filepath.Join(root, "ianchor.rb")
 	if err := os.WriteFile(formulaPath, []byte(formula), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// First exercise the actual Formula install from the unmodified archive;
+	// its installed binary's version and completion generation are checked.
+	exact := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, filepath.Join(root, "exact"), "install-only")
+	exact.Dir = buildSource
+	exact.Env = append(os.Environ(), "HOME="+root, "GOTOOLCHAIN=local", "CGO_ENABLED=0")
+	if out, err := exact.CombinedOutput(); err != nil {
+		t.Fatalf("exact archive Formula install: %v\n%s", err, out)
+	}
+	// The Formula invokes real actions. Relocate the coordinator only in this
+	// extracted test copy so its installed binary cannot touch the user's
+	// shared lock. The archive and rendered checksum above remain unchanged.
+	shared := filepath.Join(root, "shared")
+	if err := os.Mkdir(shared, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	coordinatorSource := filepath.Join(buildSource, "internal", "coordinator", "coordinator.go")
+	content, err := os.ReadFile(coordinatorSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const originalParent = `"/Users/Shared"`
+	if strings.Count(string(content), originalParent) != 1 {
+		t.Fatal("unexpected coordinator source")
+	}
+	isolated := strings.Replace(string(content), originalParent, strconv.Quote(shared), 1)
+	if err := os.WriteFile(coordinatorSource, []byte(isolated), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, root)

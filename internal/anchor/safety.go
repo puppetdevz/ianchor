@@ -35,6 +35,9 @@ func validateOriginal(configDir string, original *string) error {
 		return nil
 	}
 	path := *original
+	if err := validateCoordinatorPath(path, false); err != nil {
+		return err
+	}
 	if !filepath.IsAbs(path) || overlaps(filepath.Clean(path), filepath.Clean(configDir)) {
 		return fmt.Errorf("Unsafe original path %q overlaps the iCloud config directory or is not absolute", path)
 	}

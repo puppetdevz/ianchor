@@ -15,6 +15,8 @@ import (
 	"github.com/puppetdevz/ianchor/internal/store"
 )
 
+func testCoordinator() (func() error, error) { return func() error { return nil }, nil }
+
 type harness struct {
 	t         *testing.T
 	home      string
@@ -43,7 +45,7 @@ type result struct {
 func (h *harness) run(stdin string, args ...string) result {
 	h.t.Helper()
 	var out, errOut bytes.Buffer
-	code := cli.Run(app.New(), "1.1.1", args, strings.NewReader(stdin), &out, &errOut)
+	code := cli.Run(app.NewWithCoordinator(testCoordinator), "1.1.1", args, strings.NewReader(stdin), &out, &errOut)
 	return result{stdout: out.String(), stderr: errOut.String(), code: code}
 }
 
