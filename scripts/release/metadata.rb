@@ -49,6 +49,11 @@ body[1].each do |node|
       abort 'Unsupported dynamic Formula declaration; use static literal DSL fields'
     end
     declarations[token[1]] << token[2] if fields.include?(token[1])
+  when :method_add_arg
+    call = node[1]
+    unless call[0] == :fcall && call[1][1] == 'deny_network_access!' && node[2] == []
+      abort 'Unsupported Formula class-level call'
+    end
   when :def
     abort 'Cannot override Formula metadata methods' if fields.include?(node[1][1])
 

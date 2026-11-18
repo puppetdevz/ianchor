@@ -8,29 +8,33 @@ class Ianchor < Formula
 
   depends_on "go" => :build
 
+  deny_network_access!
+
+  def fetch
+    ENV["GOTOOLCHAIN"] = "local"
+    system "go", "mod", "download"
+    # Older Homebrew versions do not run the fetch phase.
+    (buildpath/".ianchor-modules-fetched").write ""
+  end
+
   def install
+    unless (buildpath/".ianchor-modules-fetched").exist?
+      odie "iAnchor requires Homebrew 6.0.20 or newer. Run brew update and retry."
+    end
     ENV["GOTOOLCHAIN"] = "local"
     ENV["CGO_ENABLED"] = "0"
-    system "go", "build", "-trimpath", "-buildvcs=false", "-o", bin/"ianchor", "./cmd/ianchor"
+    # Modules and their checksums were fetched and verified before this phase.
+    ENV["GOPROXY"] = "off"
+    ENV["GONOPROXY"] = "none"
+    ENV["GOSUMDB"] = "off"
+    system "go", "build", *std_go_args, "-buildvcs=false", "./cmd/ianchor"
     generate_completions_from_executable(bin/"ianchor", "completion", shells: [:zsh, :bash])
   end
 
   test do
     assert_match version.to_s, shell_output("#{bin}/ianchor --version")
 
-    home = testpath/"home"
-    cloud = home/"Library/Mobile Documents/com~apple~CloudDocs"
-    cloud.mkpath
-    (home/".zshrc").write "export IANCHOR_TEST=1\n"
-    ENV["HOME"] = home.to_s
-
-    system bin/"ianchor", "init", "--dir", "ianchor"
-    system bin/"ianchor", "add", home/".zshrc"
-    assert_predicate home/".zshrc", :symlink?
-    assert_match "linked", shell_output("#{bin}/ianchor list")
-
-    system bin/"ianchor", "recover", "zshrc"
-    assert_equal "export IANCHOR_TEST=1\n", (home/".zshrc").read
-    refute_predicate home/".zshrc", :symlink?
+    assert_match "#compdef ianchor", shell_output("#{bin}/ianchor completion zsh")
+    assert_match "complete", shell_output("#{bin}/ianchor completion bash")
   end
 end

@@ -267,17 +267,24 @@ func TestFormulaInstallAndTestInIsolatedHarness(t *testing.T) {
 	if err := os.WriteFile(formulaPath, []byte(formula), 0600); err != nil {
 		t.Fatal(err)
 	}
+	// The harness changes HOME, so preserve the caller's module cache instead
+	// of defaulting to an empty cache under the temporary home.
+	moduleCache := strings.TrimSpace(run(t, source, "go", "env", "GOMODCACHE"))
+	if moduleCache == "" {
+		t.Fatal("Go module cache path is empty")
+	}
+	harnessEnv := append(os.Environ(), "HOME="+root, "GOTOOLCHAIN=local", "CGO_ENABLED=0", "GOMODCACHE="+moduleCache)
 	// First exercise the actual Formula install from the unmodified archive;
 	// its installed binary's version and completion generation are checked.
 	exact := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, filepath.Join(root, "exact"), "install-only")
 	exact.Dir = buildSource
-	exact.Env = append(os.Environ(), "HOME="+root, "GOTOOLCHAIN=local", "CGO_ENABLED=0")
+	exact.Env = harnessEnv
 	if out, err := exact.CombinedOutput(); err != nil {
 		t.Fatalf("exact archive Formula install: %v\n%s", err, out)
 	}
-	// The Formula invokes real actions. Relocate the coordinator only in this
-	// extracted test copy so its installed binary cannot touch the user's
-	// shared lock. The archive and rendered checksum above remain unchanged.
+	// Relocate the coordinator only in this extracted test copy so the
+	// stateful roundtrip cannot touch the user's shared lock. The archive and
+	// rendered checksum above remain unchanged.
 	shared := filepath.Join(root, "shared")
 	if err := os.Mkdir(shared, 0o700); err != nil {
 		t.Fatal(err)
@@ -297,7 +304,7 @@ func TestFormulaInstallAndTestInIsolatedHarness(t *testing.T) {
 	}
 	cmd := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, root)
 	cmd.Dir = buildSource
-	cmd.Env = append(os.Environ(), "HOME="+root, "GOTOOLCHAIN=local", "CGO_ENABLED=0")
+	cmd.Env = harnessEnv
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("isolated Formula harness: %v\n%s", err, out)
 	}
@@ -311,9 +318,15 @@ func TestFormulaInstallAndTestInIsolatedHarness(t *testing.T) {
 	}
 	bad := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), badPath, filepath.Join(root, "bad"))
 	bad.Dir = buildSource
-	bad.Env = append(os.Environ(), "HOME="+root, "GOTOOLCHAIN=local", "CGO_ENABLED=0")
+	bad.Env = harnessEnv
 	if output, err := bad.CombinedOutput(); err == nil || !strings.Contains(string(output), "9.9.9") {
 		t.Fatalf("wrong Formula version not rejected: %v\n%s", err, output)
+	}
+	missingFetch := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, filepath.Join(root, "missing-fetch"), "skip-fetch")
+	missingFetch.Dir = buildSource
+	missingFetch.Env = harnessEnv
+	if output, err := missingFetch.CombinedOutput(); err == nil || !strings.Contains(string(output), "requires Homebrew 6.0.20 or newer") {
+		t.Fatalf("missing fetch phase not rejected: %v\n%s", err, output)
 	}
 	for _, shell := range []string{"bash", "zsh"} {
 		want, err := os.ReadFile(filepath.Join(source, "internal/completions/assets/ianchor."+shell))
@@ -537,6 +550,32 @@ end
 	r := w.publish(nil)
 	if r.code == 0 || !strings.Contains(r.output, "Refusing downgrade from 2.0.0 to 1.1.1") {
 		t.Fatalf("downgrade = %+v", r)
+	}
+}
+
+func TestFormulaMetadataRejectsClassLevelCalls(t *testing.T) {
+	metadata, err := filepath.Abs("../../scripts/release/metadata.rb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		call string
+		want bool
+	}{
+		{`deny_network_access!`, true},
+		{`deny_network_access!()`, false},
+		{`deny_network_access!(:build)`, false},
+		{`arbitrary_call()`, false},
+		{`deny_network_access! { system "false" }`, false},
+	} {
+		t.Run(tc.call, func(t *testing.T) {
+			cmd := exec.Command("ruby", metadata)
+			cmd.Stdin = strings.NewReader("class Ianchor < Formula\n  " + tc.call + "\nend\n")
+			out, err := cmd.CombinedOutput()
+			if (err == nil) != tc.want {
+				t.Fatalf("metadata validation: %v, output: %s", err, out)
+			}
+		})
 	}
 }
 

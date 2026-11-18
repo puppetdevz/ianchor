@@ -3,6 +3,7 @@
 require "pathname"
 require "fileutils"
 require "open3"
+require "json"
 
 class Formula
   class << self
@@ -13,6 +14,7 @@ class Formula
     def sha256(*); end
     def license(*); end
     def depends_on(*); end
+    def deny_network_access!; end
     def test(&block); @test_block = block; end
     attr_reader :test_block
   end
@@ -25,9 +27,19 @@ class Formula
 
   def bin; @root/"bin"; end
   def testpath; @root/"test"; end
+  def buildpath; Pathname.pwd; end
   def version; self.class.version; end
+  def odie(message); raise message; end
+  def std_go_args; ["-trimpath", "-ldflags=-s -w", "-o", bin/"ianchor"]; end
 
   def system(*args)
+    if args == ["go", "mod", "download"]
+      raise "fetch must use the local Go toolchain" unless ENV["GOTOOLCHAIN"] == "local"
+      @fetched = true # Simulate the fetch phase without network access.
+      return
+    end
+    raise "fetch phase was not invoked" unless @fetched
+    raise "build must be offline" unless ENV["GOPROXY"] == "off" && ENV["GONOPROXY"] == "none" && ENV["GOSUMDB"] == "off"
     raise "command failed: #{args.inspect}" unless Kernel.system(*args.map(&:to_s))
   end
 
@@ -66,6 +78,8 @@ end
 
 load ARGV.fetch(0)
 formula = Ianchor.new(ARGV.fetch(1))
+FileUtils.rm_f(formula.buildpath/".ianchor-modules-fetched")
+formula.fetch unless ARGV[2] == "skip-fetch"
 formula.install
 # The installed product must work without Node, npm or the Go toolchain in
 # PATH. This isolates runtime verification from the build environment.
@@ -77,6 +91,26 @@ begin
     raise "installed version mismatch: #{version}" unless status.success? && version.include?(formula.version.to_s)
   else
     formula.instance_exec(&Ianchor.test_block)
+    # Exercise stateful operations only against the test-rewritten coordinator.
+    home = formula.testpath/"home"
+    (home/"Library/Mobile Documents/com~apple~CloudDocs").mkpath
+    config = home/".zshrc"
+    config.write("export IANCHOR_TEST=1\n")
+    ENV["HOME"] = home.to_s
+    executable = (formula.bin/"ianchor").to_s
+    run = lambda do |*args|
+      output, status = Open3.capture2e(executable, *args.map(&:to_s))
+      raise "command failed: #{args.inspect}: #{output}" unless status.success?
+      output
+    end
+    run.call("init", "--dir", "ianchor")
+    run.call("add", config)
+    raise "config is not a symlink" unless config.symlink?
+    entries = JSON.parse(run.call("list", "--json"))
+    expected = { "name" => "zshrc", "original_path" => config.to_s, "type" => "file", "status" => "linked" }
+    raise "unexpected entries: #{entries.inspect}" unless entries.size == 1 && expected.all? { |key, value| entries[0][key] == value }
+    run.call("recover", "zshrc")
+    raise "config was not recovered" unless !config.symlink? && config.read == "export IANCHOR_TEST=1\n"
   end
 ensure
   ENV["PATH"] = old_path
