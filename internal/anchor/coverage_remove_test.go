@@ -3,6 +3,7 @@ package anchor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -15,6 +16,20 @@ func removeFixture(t *testing.T) (*fixture, string) {
 		t.Fatalf("add: %v", err)
 	}
 	return f, local
+}
+
+func TestDBDeletePropagatesStoreError(t *testing.T) {
+	f, _ := removeFixture(t)
+	entry, err := f.db.GetEntry(".zshrc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbDelete(f.db, entry); err == nil {
+		t.Fatal("expected closed database error")
+	}
 }
 
 func TestRemoveErrors(t *testing.T) {
@@ -111,10 +126,36 @@ func TestRemoveErrors(t *testing.T) {
 			t.Fatal("expected cleanup failure")
 		}
 	})
+	t.Run("symlink identity lookup", func(t *testing.T) {
+		f, local := removeFixture(t)
+		real := lstatPath
+		override(t, &lstatPath, func(path string) (os.FileInfo, error) {
+			if path == local {
+				if _, err := os.Lstat(filepath.Join(f.configDir, ".zshrc")); os.IsNotExist(err) {
+					return nil, errSeam
+				}
+			}
+			return real(path)
+		})
+		mustContain(t, removeErr(t, f), errSeam.Error())
+		assertRemoveIntact(t, f)
+	})
+	t.Run("symlink staging name", func(t *testing.T) {
+		f, _ := removeFixture(t)
+		real := stagingPath
+		override(t, &stagingPath, func(dir, name string) (string, error) {
+			if strings.HasSuffix(name, "-removed-link") {
+				return "", errSeam
+			}
+			return real(dir, name)
+		})
+		mustContain(t, removeErr(t, f), errSeam.Error())
+		assertRemoveIntact(t, f)
+	})
 	t.Run("symlink removal", func(t *testing.T) {
 		f, local := removeFixture(t)
 		setHook(t, func(op, path string) error {
-			if op == "remove" && path == local {
+			if op == "rename" && path == local {
 				return errSeam
 			}
 			return nil

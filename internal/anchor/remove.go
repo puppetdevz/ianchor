@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/puppetdevz/ianchor/internal/fsx"
@@ -38,6 +39,8 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 	j := &journal{}
 	var staged string
 	var stageIdentity os.FileInfo
+	var linkStage string
+	var linkIdentity os.FileInfo
 	var root *backupRoot
 	var inBackup bool
 	if fsx.Exists(icloudPath) {
@@ -120,22 +123,46 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 	if entry.OriginalPath != nil {
 		original := *entry.OriginalPath
 		if fsx.IsSymlink(original) {
+			linkIdentity, err = lstatPath(original)
+			if err != nil {
+				return RemoveResult{}, j.fail(err)
+			}
 			if target, err := readlinkPath(original); err == nil && target == icloudPath {
-				if err := remove(original); err != nil {
+				linkStage, err = stagingPath(filepath.Dir(original), filepath.Base(original)+"-removed-link")
+				if err != nil {
 					return RemoveResult{}, j.fail(err)
 				}
-				j.add("recreate symlink", func() error { return symlink(target, original) })
+				if err := rename(original, linkStage); err != nil {
+					return RemoveResult{}, j.fail(err)
+				}
+				actual, statErr := lstatPath(linkStage)
+				if statErr != nil || !os.SameFile(linkIdentity, actual) {
+					if restoreErr := rename(linkStage, original); restoreErr != nil {
+						return RemoveResult{}, j.fail(fmt.Errorf("entry changed; replacement retained at %s: %v", linkStage, restoreErr))
+					}
+					return RemoveResult{}, j.fail(fmt.Errorf("entry at %s was replaced", original))
+				}
+				j.add("restore symlink from "+linkStage+" to "+original, func() error { return moveOwnedEntry(linkStage, original, linkIdentity) })
 			}
 		}
 	}
 
 	// The commit follows immediately, so an undo registered here could never
 	// run; a row restore would only be reachable if a later step failed.
-	if err := dbDelete(db, name); err != nil {
+	if err := dbDelete(db, entry); err != nil {
 		return RemoveResult{}, j.fail(err)
 	}
 
 	j.commit()
+	var cleanupErrors []error
+	var retained []string
+	cloudCleanupFailed := false
+	if linkStage != "" {
+		if err := removeOwnedSymlink(linkStage, linkIdentity); err != nil {
+			retained = append(retained, cleanupLocation(err, linkStage))
+			cleanupErrors = append(cleanupErrors, err)
+		}
+	}
 	if staged != "" {
 		var err error
 		if inBackup {
@@ -144,13 +171,19 @@ func Remove(db *store.DB, configDir, name string) (RemoveResult, error) {
 			err = removeOwnedEntry(staged, stageIdentity, true)
 		}
 		if err != nil {
-			return RemoveResult{}, &committedCleanupError{operation: "remove", path: cleanupLocation(err, staged), err: err}
+			cloudCleanupFailed = true
+			retained = append(retained, cleanupLocation(err, staged))
+			cleanupErrors = append(cleanupErrors, err)
 		}
 	}
-	if root != nil {
+	if root != nil && !cloudCleanupFailed {
 		if err := root.cleanupCreation(); err != nil {
-			return RemoveResult{}, &committedCleanupError{operation: "remove", path: root.display, err: err}
+			retained = append(retained, root.display)
+			cleanupErrors = append(cleanupErrors, err)
 		}
+	}
+	if len(cleanupErrors) > 0 {
+		return RemoveResult{}, &committedCleanupError{operation: "remove", path: strings.Join(retained, ", "), err: errors.Join(cleanupErrors...)}
 	}
 	return RemoveResult{Name: name, OriginalPath: entry.OriginalPath}, nil
 }

@@ -102,9 +102,8 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 		return AddResult{}, err
 	}
 	if previous != nil && !opts.Force && !fsx.Lexists(destPath) {
-		// A row without a shared entity would be reused by dbAdd's
-		// INSERT OR IGNORE, keeping the old original_path while this call
-		// creates a symlink for a different path (DELTA-018, REQ-006).
+		// A row without a shared entity still belongs to its original source;
+		// refuse an unforced takeover before moving any files (DELTA-018).
 		return AddResult{}, fmt.Errorf("\"%s\" is still tracked but its iCloud copy is missing. Use --force to take over the entry, or run \"ianchor remove %s\" first.", destName, destName)
 	}
 	for _, entry := range entries {
@@ -220,6 +219,11 @@ func Add(db *store.DB, opts AddOptions) (AddResult, error) {
 	var displaced string
 	var displacedIdentity os.FileInfo
 	if fsx.Lexists(destPath) {
+		// A competing add may have published after the initial conflict check.
+		// Never displace that entry unless the caller explicitly chose force.
+		if !opts.Force {
+			return AddResult{}, j.fail(fmt.Errorf("\"%s\" already exists in iCloud directory. Use --force to overwrite.", destName))
+		}
 		displacedIdentity, err = lstatPath(destPath)
 		if err != nil {
 			return AddResult{}, j.fail(err)

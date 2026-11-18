@@ -10,6 +10,8 @@ iAnchor moves config files/directories into an iCloud Drive directory, then crea
 
 For cross-volume moves, content, directory structure, symlink targets, and ordinary permissions are checked before the original is deleted; a copy or check failure retains the original. ACLs, extended attributes, hard-link relationships and other hidden metadata are not guaranteed to be preserved. Local verification does not mean iCloud has uploaded the data. Back up important files separately and avoid modifying them during the move; the program cannot prevent writes through already-open file handles after verification. If original cleanup fails after commit, the move is already effective and the retained original reported in the error may be partially deleted.
 
+**Concurrency limitation:** Do not run multiple modifying commands (including `init`, `add`, `remove`, `recover`, and `relink`) at the same time, even on one Mac. Wait for the operation and iCloud sync to finish before operating on another device. There is currently no operation-level cross-process coordination, and some concurrent interleavings can leave tracked records inconsistent with the files.
+
 ## Install
 
 Requires macOS, enabled iCloud Drive, and Homebrew.
@@ -56,6 +58,8 @@ The Go rewrite targets compatibility with the Node version's commands, output, e
 The source repository's `Formula/ianchor.rb` is the authoritative placeholder template, not a directly installable Formula. A stable `vMAJOR.MINOR.PATCH` tag must match the `VERSION` file. Actions renders the template from that tagged commit with the source archive SHA256 and syncs the complete Formula to the tap's `main`. Keep installation changes in the source template, not in tap-only edits. Prerelease tags are rejected, and tags are immutable: existing tags are never deleted or moved, so template fixes require a new version.
 
 Before the first release, configure and verify server-side protection against deleting or force-updating released tags. The script's repeated checks are not an atomic lock and cannot prevent an external concurrent tag move. Also prepare an existing `puppetdevz/homebrew-tap` repository with at least one commit on `main`, and configure `HOMEBREW_TAP_TOKEN` in the source repository with permission to push directly to that branch. For a fine-grained PAT, include `puppetdevz/homebrew-tap` in the authorized repositories and grant Contents read/write permission; update the secret if the old token only covered the old repository. Missing `Formula/` directories or the target Formula are created automatically; the workflow does not create repositories or change branch protection. Maintainers must explicitly invoke the release process; do not move old tags to adopt a new workflow.
+
+If a push fails after `scripts/tag.sh` creates the version commit, fix the cause and run `./scripts/tag.sh resume` to push that version instead of bumping again. HEAD must still be the matching version commit; existing tags are never moved.
 
 The workflow reads metadata through Ruby's syntax tree without executing tap code. It accepts static, unconditional, direct DSL declarations within a single `Ianchor < Formula` class. Dynamic/indirect calls, conditional metadata and unsupported class-level structures are rejected before publishing. Verify the actual version and normalize those declarations before rerunning; do not bypass version checks. Release query failures report sanitized categories and recovery guidance, never raw error output.
 

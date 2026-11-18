@@ -383,6 +383,89 @@ func (db *DB) AddEntry(name string, originalPath *string, kind, status string) e
 	return NormalizeError(err)
 }
 
+// AddEntryExclusive requires an insertion instead of silently accepting a
+// concurrent writer's row. Existing callers of AddEntry retain ignore semantics.
+func (db *DB) AddEntryExclusive(name string, originalPath *string, kind, status string) error {
+	if err := db.writable(); err != nil {
+		return err
+	}
+	_, err := db.sql.Exec(
+		"INSERT INTO entries (name, original_path, type, status) VALUES (?, ?, ?, ?)",
+		name, originalPath, kind, status,
+	)
+	return NormalizeError(err)
+}
+
+// DeleteEntryIfUnchanged compares the inspected row's stored values before
+// deleting it. Identical replacements cannot be distinguished by this check.
+func (db *DB) DeleteEntryIfUnchanged(entry *Entry) (bool, error) {
+	if err := db.writable(); err != nil {
+		return false, err
+	}
+	stored := func(name string, fallback any) any {
+		if value, ok := entry.raw[name]; ok {
+			return value
+		}
+		return fallback
+	}
+	var id int64
+	err := db.sql.QueryRow(`DELETE FROM entries WHERE id IS ? AND name IS ?
+		AND original_path IS ? AND type IS ? AND status IS ?
+		AND created_at IS ? AND updated_at IS ? RETURNING id`,
+		stored("id", entry.ID), stored("name", entry.Name), stored("original_path", entry.OriginalPath),
+		stored("type", entry.Type), stored("status", entry.Status), stored("created_at", entry.CreatedAt),
+		stored("updated_at", entry.UpdatedAt)).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, NormalizeError(err)
+	}
+	return true, nil
+}
+
+// DiscoveredEntry describes a candidate found in the iCloud directory.
+type DiscoveredEntry struct {
+	Name         string
+	OriginalPath *string
+	Type         string
+}
+
+// AddDiscovered inserts a discovery batch atomically. Rows already inserted by
+// another writer are not counted or owned by this operation. On failure SQLite
+// rolls the entire batch back rather than deleting rows by name.
+func (db *DB) AddDiscovered(entries []DiscoveredEntry) (count int, retErr error) {
+	if err := db.writable(); err != nil {
+		return 0, err
+	}
+	tx, err := db.sql.Begin()
+	if err != nil {
+		return 0, NormalizeError(err)
+	}
+	defer func() {
+		if retErr != nil {
+			if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+				retErr = errors.Join(retErr, fmt.Errorf("discovery rollback failed: %w", NormalizeError(err)))
+			}
+		}
+	}()
+	for _, entry := range entries {
+		var id int64
+		err := tx.QueryRow("INSERT OR IGNORE INTO entries (name, original_path, type, status) VALUES (?, ?, ?, 'unlinked') RETURNING id", entry.Name, entry.OriginalPath, entry.Type).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return 0, NormalizeError(err)
+		}
+		count++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, NormalizeError(err)
+	}
+	return count, nil
+}
+
 // UpsertEntry records a name, taking over an existing row when --force lets
 // ianchor replace whatever lived in the iCloud directory. id and created_at are
 // preserved; original_path, type, status and updated_at follow the new source.

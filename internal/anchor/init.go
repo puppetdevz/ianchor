@@ -65,8 +65,7 @@ func discover(db *store.DB, configDir string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	j := &journal{}
-	discovered := 0
+	var candidates []store.DiscoveredEntry
 	for _, dirEntry := range dirEntries {
 		name := dirEntry.Name()
 		if strings.HasPrefix(name, "ianchor.db") || ignored(name) {
@@ -74,7 +73,7 @@ func discover(db *store.DB, configDir string) (int, error) {
 		}
 		existing, err := db.GetEntry(name)
 		if err != nil {
-			return 0, j.fail(err)
+			return 0, err
 		}
 		if existing != nil {
 			continue
@@ -83,13 +82,12 @@ func discover(db *store.DB, configDir string) (int, error) {
 		if info, err := os.Lstat(filepath.Join(configDir, name)); err == nil && info.IsDir() {
 			kind = "directory"
 		}
-		if err := dbAdd(db, name, known.Guess(name), kind, "unlinked"); err != nil {
-			return 0, j.fail(err)
+		// Invoke the injection hook before reserving a database connection; a
+		// hook may itself use this handle, whose pool has only one connection.
+		if err := checkOp("db.add", name); err != nil {
+			return 0, err
 		}
-		entryName := name
-		j.add("remove discovered entry "+entryName, func() error { return dbDelete(db, entryName) })
-		discovered++
+		candidates = append(candidates, store.DiscoveredEntry{Name: name, OriginalPath: known.Guess(name), Type: kind})
 	}
-	j.commit()
-	return discovered, nil
+	return db.AddDiscovered(candidates)
 }

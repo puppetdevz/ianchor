@@ -292,7 +292,7 @@ func dbAdd(db *store.DB, name string, originalPath *string, kind, status string)
 	if err := checkOp("db.add", name); err != nil {
 		return err
 	}
-	return db.AddEntry(name, originalPath, kind, status)
+	return db.AddEntryExclusive(name, originalPath, kind, status)
 }
 
 func dbUpsert(db *store.DB, name string, originalPath *string, kind, status string) error {
@@ -302,11 +302,18 @@ func dbUpsert(db *store.DB, name string, originalPath *string, kind, status stri
 	return db.UpsertEntry(name, originalPath, kind, status)
 }
 
-func dbDelete(db *store.DB, name string) error {
-	if err := checkOp("db.delete", name); err != nil {
+func dbDelete(db *store.DB, entry *store.Entry) error {
+	if err := checkOp("db.delete", entry.Name); err != nil {
 		return err
 	}
-	return db.DeleteEntry(name)
+	deleted, err := db.DeleteEntryIfUnchanged(entry)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return errorf("Entry %q changed during removal.", entry.Name)
+	}
+	return nil
 }
 
 func dbSetStatus(db *store.DB, name, status string) error {
