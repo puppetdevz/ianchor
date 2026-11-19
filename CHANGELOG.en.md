@@ -2,6 +2,24 @@
 
 [简体中文](CHANGELOG.md)
 
+## 2.0.0 - 2026-11-19
+
+### Breaking Changes
+
+- Rewritten from Node.js in Go; Homebrew builds from source and neither Node nor native SQLite modules are needed at runtime. Installation requires Homebrew 6.0.20 or later.
+- To protect data, some unsafe names, overlapping paths, and special-file operations are refused. Stricter conflict checks apply to missing cloud copies, case aliases, and files tracked by other entries. `recover` refuses dangling links and requires `--force` to replace a link to another existing object.
+
+### Changed
+
+- Existing commands and data layouts remain compatibility goals; existing sync directories, databases, backups, and configuration need no migration. Low-level error text and rare manually modified database schemas may differ.
+- Destructive operations add identity checks and attempt rollback for failures before commit; rollback or post-commit cleanup can fail and require manual intervention. Cross-volume moves verify contents, structure, link targets, and ordinary permissions before deleting the original. This version's data commands run serially for the same user on the same Mac, but do not provide cross-device locking or crash recovery.
+- Hardened Homebrew release retries and tag validation, and added legacy compatibility fixtures, fault-injection tests, and a strict coverage gate.
+
+### Notes
+
+- File copying does not guarantee preservation of ACLs, extended attributes, or hard links; local verification does not mean iCloud upload is complete. If restoration of directory permissions temporarily changed during cleanup fails, including on an existing parent directory, a directory with wider permissions may be left without an error. Keep separate backups of important data.
+- `relink` can replace an existing `.bak`; save important backups elsewhere first. Manual acceptance on two real Macs and Homebrew has not yet been completed.
+
 ## 1.1.1 - 2026-10-23
 
 ### Fixes

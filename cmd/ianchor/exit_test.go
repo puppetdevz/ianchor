@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	ianchor "github.com/puppetdevz/ianchor"
 )
 
 func TestMainUsesExitWrapper(t *testing.T) {
@@ -43,7 +45,7 @@ func TestMainUsesExitWrapper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !called || code != 0 || !strings.Contains(string(out), "1.1.1") {
+	if !called || code != 0 || !strings.Contains(string(out), ianchor.Version) {
 		t.Fatalf("called=%v code=%d out=%q", called, code, out)
 	}
 

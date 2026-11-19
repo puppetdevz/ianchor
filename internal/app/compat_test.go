@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	ianchor "github.com/puppetdevz/ianchor"
 	"github.com/puppetdevz/ianchor/internal/app"
 	"github.com/puppetdevz/ianchor/internal/cli"
 	_ "modernc.org/sqlite"
@@ -222,12 +221,12 @@ func normalise(s, home string) string {
 	})
 }
 
-// run executes one CLI invocation the same way cmd/ianchor does.
+// run executes the CLI with the version recorded in the Node.js baseline.
 func run(t *testing.T, home string, c compatCase) expectation {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	useHome(t, home)
-	code := cli.Run(app.NewWithCoordinator(testCoordinator), ianchor.Version, c.Args, strings.NewReader(c.Stdin), &stdout, &stderr)
+	code := cli.Run(app.NewWithCoordinator(testCoordinator), "1.1.1", c.Args, strings.NewReader(c.Stdin), &stdout, &stderr)
 	started, ok := homeStarted.Load(home)
 	if !ok {
 		t.Fatal("missing HOME start time")

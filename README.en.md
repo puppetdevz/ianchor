@@ -76,9 +76,9 @@ ianchor init --dir dotfiles  # custom directory name
 
 Without `--dir`, initialization prompts for a directory name; press Enter for `ianchor`. The default sync directory is `~/Library/Mobile Documents/com~apple~CloudDocs/ianchor/`, containing `ianchor.db`. The directory choice is saved locally in `~/.config/ianchor.json`.
 
-Initialization discovers and registers existing cloud configs but does not create local symlinks. Initialize other devices too, then run `relink` for entries with a known original path.
+Initialization discovers and registers eligible existing cloud configs but does not create local symlinks. It ignores `.bak`, images, names beginning with `ianchor.db`, and certain system files. Original paths for discovered entries are guessed from known names and may be unknown; check the records with `list` before running `relink`.
 
-The shared database stores the absolute original path recorded when an entry was added; it is not rewritten for the current device. Relinking across devices requires identical original paths, including usernames and config locations. Do not run `relink` directly when those paths differ.
+The shared database does not rewrite an added entry's absolute original path for the current device. Relinking across devices requires identical original paths, including usernames and config locations. Do not run `relink` directly when those paths differ.
 
 ### Add a config file
 
@@ -92,7 +92,7 @@ Unless `--name` is provided, the leading dot is stripped: `~/.zshrc` is tracked 
 
 If an entry with that name is still tracked but its iCloud copy is missing, `add` fails and says the name is still tracked instead of keeping the old entry's original path. Use `ianchor add --force` to take over the entry, or `ianchor remove <name>` first.
 
-macOS stores one file under several spellings, so a name that differs from a tracked entry only by case is refused: adding it while another row resolves to the same path and its iCloud copy is missing fails and names that row (`--force` does not override the check, just as `recover` refuses a dangling local link even with force, so remove that row first). `remove` refuses only when another entry still tracks the very file it would delete, and names that entry; renaming the copy inside the iCloud directory does not make it unremovable. When the named row is a legacy path-shaped name, which this build refuses to touch, the message says to correct the row with `sqlite3` instead.
+On a case-insensitive volume, one file may have several spellings. Adding a name when another row resolves to a path differing only by case and its iCloud copy is missing fails and names that row (`--force` does not override the check, just as `recover` refuses a dangling local link even with force, so remove that row first). `remove` refuses only when another entry still tracks the very file it would delete, and names that entry; renaming the copy inside the iCloud directory does not make it unremovable. When the named row is a legacy path-shaped name, which this build refuses to touch, the message says to correct the row with `sqlite3` instead.
 
 ### List tracked configs
 
@@ -114,7 +114,7 @@ ianchor recover --force zshrc  # overwrite existing file
 
 ### Relink an unlinked file
 
-Re-create the symlink to the cloud copy. Requires an existing tracking entry, original path, and cloud contents. An existing local file or directory is first renamed to `<original-path>.bak`; local changes are not merged.
+Re-create the symlink to the cloud copy. Requires an existing tracking entry, original path, and cloud contents. An existing local file or directory is first renamed to `<original-path>.bak`; local changes are not merged. An existing `.bak` may be replaced; incompatible types or a nonempty backup directory cause refusal. Save important backups elsewhere first. A symlink at the original path pointing elsewhere is replaced without being saved as `.bak`.
 
 ```bash
 ianchor relink zshrc

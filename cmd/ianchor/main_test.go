@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	ianchor "github.com/puppetdevz/ianchor"
 )
 
 func TestRunVersion(t *testing.T) {
@@ -25,7 +27,7 @@ func TestRunVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code != 0 || !strings.Contains(string(got), "1.1.1") {
+	if code != 0 || !strings.Contains(string(got), ianchor.Version) {
 		t.Fatalf("code=%d out=%q", code, got)
 	}
 }
@@ -42,7 +44,7 @@ func TestMainExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("main exit: %v\n%s", err, out)
 	}
-	if !strings.Contains(string(out), "1.1.1") {
+	if !strings.Contains(string(out), ianchor.Version) {
 		t.Fatalf("output=%q", out)
 	}
 }

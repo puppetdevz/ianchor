@@ -33,8 +33,11 @@ func newWorkspace(t *testing.T) *workspace {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{"Formula/ianchor.rb", "VERSION"} {
-		copyFile(t, filepath.Join(repoSource, rel), filepath.Join(root, rel))
+	copyFile(t, filepath.Join(repoSource, "Formula/ianchor.rb"), filepath.Join(root, "Formula/ianchor.rb"))
+	// This isolated release fixture uses a fixed version and tag, independent
+	// of the product version in the source checkout.
+	if err := os.WriteFile(filepath.Join(root, "VERSION"), []byte("1.1.1\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	scripts, err := os.ReadDir(filepath.Join(repoSource, "scripts", "release"))
 	if err != nil {
