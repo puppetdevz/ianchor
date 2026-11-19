@@ -369,6 +369,7 @@ func TestRemoveConfirmation(t *testing.T) {
 }
 
 func TestListStatusesAndJSON(t *testing.T) {
+	t.Setenv("FORCE_COLOR", "1")
 	h := newHarness(t)
 	h.mustRun("", "init", "--dir", "ianchor")
 	linked := h.write(".zshrc", "zsh\n")

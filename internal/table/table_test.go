@@ -9,6 +9,8 @@ import (
 // golden is produced by cli-table3@0.6.5 with default options (see
 // testdata/table.golden), which is the renderer the Node baseline used.
 func TestRenderMatchesCliTable3(t *testing.T) {
+	withoutColorEnv(t)
+	t.Setenv("TERM", "xterm-256color")
 	data, err := os.ReadFile("testdata/table.golden")
 	if err != nil {
 		t.Fatalf("read golden: %v", err)

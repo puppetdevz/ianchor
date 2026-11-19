@@ -188,7 +188,8 @@ func useHome(t *testing.T, home string) {
 	} {
 		t.Setenv(kv[0], kv[1])
 	}
-	for _, name := range []string{"NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "CLICOLOR"} {
+	// The recorded Node baseline used a color-capable terminal outside CI.
+	for _, name := range []string{"NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "CLICOLOR", "CI", "TEAMCITY_VERSION"} {
 		t.Setenv(name, "")
 		os.Unsetenv(name)
 	}

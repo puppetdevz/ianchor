@@ -2,7 +2,15 @@
 
 [简体中文](CHANGELOG.md)
 
+## 2.0.1 - 2026-11-19
+
+### Fixed
+
+- Isolated test color environments to fix table and compatibility snapshot failures in GitHub Actions without changing application color behavior. This release includes the changes listed for 2.0.0 below.
+
 ## 2.0.0 - 2026-11-19
+
+This version was tagged, but no GitHub Release or Homebrew Formula was published because CI verification failed; use 2.0.1 instead.
 
 ### Breaking Changes
 
