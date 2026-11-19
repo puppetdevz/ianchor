@@ -1,6 +1,12 @@
 // Package anchor implements the ianchor operations: init, add, recover, relink,
-// remove and list. Every mutating operation records compensating steps so an
-// ordinary error leaves the filesystem and database in their previous state.
+// remove and list. Mutating operations record compensating steps for failures;
+// if compensation fails, the error reports the failure and remaining steps.
+//
+// Callers must coordinate operations for the same local user and hold the lease
+// for the whole operation. The CLI provides this coordination; it does not
+// protect against other users, machines, or non-cooperating processes. When an
+// operation takes both a database and config directory, the database must have
+// been opened for that directory. These preconditions are not enforced here.
 package anchor
 
 import (

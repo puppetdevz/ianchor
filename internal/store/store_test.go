@@ -745,6 +745,24 @@ func TestEntryJSONMatchesNodeDriverValues(t *testing.T) {
 	}
 }
 
+// TestEntryMarshalUsesStoredSnapshotExceptStatus pins the list compatibility
+// contract when callers modify typed fields after reading a row.
+func TestEntryMarshalUsesStoredSnapshotExceptStatus(t *testing.T) {
+	entry := Entry{
+		Name:   "changed",
+		Status: "missing",
+		order:  []string{"name", "status", "extra"},
+		raw:    map[string]any{"name": "stored", "status": "linked", "extra": "value"},
+	}
+	got, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"name":"stored","status":"missing","extra":"value"}`; string(got) != want {
+		t.Fatalf("JSON = %s, want %s", got, want)
+	}
+}
+
 // TestEntryMarshalRejectsUnencodableValue covers a stored value JSON cannot
 // represent: the failure must surface instead of being silently dropped.
 func TestEntryMarshalRejectsUnencodableValue(t *testing.T) {
