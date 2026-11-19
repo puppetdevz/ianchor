@@ -84,10 +84,16 @@ if { [ -e "$TAP_PATH/Formula" ] && [ ! -d "$TAP_PATH/Formula" ]; } || { [ -e "$T
 fi
 
 # Parse legacy metadata without evaluating arbitrary Ruby from the tap.
-if ! ruby "$ROOT/scripts/release/check-existing.rb" "$TAP_PATH/Formula/ianchor.rb" "$VERSION" "$PARSER"; then
+set +e
+ruby "$ROOT/scripts/release/check-existing.rb" "$TAP_PATH/Formula/ianchor.rb" "$VERSION" "$PARSER"
+EXISTING_STATUS=$?
+set -e
+if [ "$EXISTING_STATUS" -ne 0 ] && [ "$EXISTING_STATUS" -ne 3 ]; then
   echo "::error::Existing Formula metadata was rejected; inspect the tap before retrying" >&2
   exit 1
 fi
+HISTORICAL=false
+[ "$EXISTING_STATUS" -ne 3 ] || HISTORICAL=true
 if [ -f "$TAP_PATH/Formula/ianchor.rb" ]; then ruby -c "$TAP_PATH/Formula/ianchor.rb" >/dev/null; fi
 
 curl --fail --location --retry 3 --output "$TARBALL_PATH" "$TARBALL_URL"
@@ -95,7 +101,9 @@ SHA256=$(shasum -a 256 "$TARBALL_PATH" | awk '{print $1}')
 echo "Source archive sha256: $SHA256"
 ruby "$ROOT/scripts/release/render.rb" "$TEMPLATE" "$CANDIDATE" "$VERSION" "$TARBALL_URL" "$SHA256" "$PARSER"
 ruby -c "$CANDIDATE" >/dev/null
-ruby "$ROOT/scripts/release/check-existing.rb" "$TAP_PATH/Formula/ianchor.rb" "$VERSION" "$PARSER" "$TARBALL_URL" "$SHA256"
+if [ "$HISTORICAL" = false ]; then
+  ruby "$ROOT/scripts/release/check-existing.rb" "$TAP_PATH/Formula/ianchor.rb" "$VERSION" "$PARSER" "$TARBALL_URL" "$SHA256"
+fi
 check_source_tag
 
 # An API failure is not evidence of absence. First prove repository access.
@@ -109,7 +117,11 @@ if [ "$QUERY_STATUS" -eq 0 ] && [ "$HTTP_STATUS" = 200 ]; then
   ruby "$ROOT/scripts/release/check-release.rb" "$WORK/response" "$TAG"
   echo "Release $TAG already exists; skipping creation."
 elif [ "$QUERY_STATUS" -ne 0 ] && [ "$HTTP_STATUS" = 404 ]; then
-  GH_TOKEN="$SOURCE_TOKEN" gh release create "$TAG" --repo "$REPO" --verify-tag --title "$TAG" --notes "Release $TAG"
+  if [ "$HISTORICAL" = true ]; then
+    GH_TOKEN="$SOURCE_TOKEN" gh release create "$TAG" --repo "$REPO" --verify-tag --title "$TAG" --notes "Release $TAG" --latest=false
+  else
+    GH_TOKEN="$SOURCE_TOKEN" gh release create "$TAG" --repo "$REPO" --verify-tag --title "$TAG" --notes "Release $TAG"
+  fi
 else
   # Classify untrusted stderr without ever printing it (it may contain credentials).
   ruby "$ROOT/scripts/release/classify.rb" "$WORK/query-error" "$QUERY_STATUS" "${HTTP_STATUS:-unknown}"
@@ -117,6 +129,10 @@ else
 fi
 
 check_source_tag
+if [ "$HISTORICAL" = true ]; then
+  echo "Newer Formula already published; skipping tap update."
+  exit 0
+fi
 cd "$TAP_PATH"
 REMOTE_BASE=$(git ls-remote origin refs/heads/main | awk '{print $1}')
 if [ "$REMOTE_BASE" != "$BASE" ]; then
@@ -136,7 +152,12 @@ case "$DIFF_STATUS" in
     git config user.name "github-actions[bot]"
     git config user.email "github-actions[bot]@users.noreply.github.com"
     git commit -m "chore: update formula for ${TAG}" -- Formula/ianchor.rb
-    git push origin HEAD:main
+    # The candidate is a child of BASE; the explicit lease is a server-side CAS,
+    # including when a competing writer rewinds main to an ancestor.
+    git push --force-with-lease="refs/heads/main:$BASE" origin HEAD:refs/heads/main || {
+      echo "::error::Tap update failed; rerun to revalidate current main" >&2
+      exit 1
+    }
     ;;
   *)
     echo "::error::Cannot inspect staged Formula diff (exit=$DIFF_STATUS)" >&2

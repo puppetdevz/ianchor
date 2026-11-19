@@ -46,7 +46,10 @@ published = old.split('.').map(&:to_i)
 3.times do |index|
   break if current[index] > published[index]
 
-  abort "Refusing downgrade from #{old} to #{target}" if current[index] < published[index]
+  if current[index] < published[index]
+    warn "Skipping tap downgrade from #{old} to #{target}"
+    exit 3
+  end
 end
 if old == target && target_url && (urls[0] != target_url || shas[0].downcase != target_sha.to_s.downcase)
   abort "Refusing to change source identity for existing version #{old}"

@@ -469,6 +469,25 @@ func TestPublishCreatesFormula(t *testing.T) {
 	}
 }
 
+func TestPublishLeaseRejectsConcurrentRewind(t *testing.T) {
+	w := newWorkspace(t)
+	w.commitTap("")
+	ancestor := strings.TrimSpace(run(t, w.tapBare, "git", "rev-parse", "main"))
+	run(t, w.tapWork, "git", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--allow-empty", "-qm", "advance")
+	run(t, w.tapWork, "git", "push", "-q", "origin", "main")
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.writeMock("git", "#!/bin/bash\nif [[ \" $* \" == *\" --force-with-lease=\"* ]]; then\n  "+realGit+" --git-dir=\""+w.tapBare+"\" update-ref refs/heads/main "+ancestor+"\nfi\nexec "+realGit+" \"$@\"\n")
+	if r := w.publish(nil); r.code == 0 {
+		t.Fatalf("stale update succeeded: %s", r.output)
+	}
+	if got := strings.TrimSpace(run(t, w.tapBare, "git", "rev-parse", "main")); got != ancestor {
+		t.Fatalf("concurrent rewind overwritten: %s", got)
+	}
+}
+
 func TestPublishRetryAfterTapPushFailure(t *testing.T) {
 	w := newWorkspace(t)
 	w.commitTap("")
@@ -532,7 +551,7 @@ func TestPublishRejectsUnstableAndMismatchedTags(t *testing.T) {
 	}
 }
 
-func TestPublishRefusesDowngrade(t *testing.T) {
+func TestPublishHistoricalReleaseSkipsDowngrade(t *testing.T) {
 	w := newWorkspace(t)
 	w.commitTap(`class Ianchor < Formula
   desc "x"
@@ -551,8 +570,12 @@ end
 `)
 	defer w.assertTapUnchanged()()
 	r := w.publish(nil)
-	if r.code == 0 || !strings.Contains(r.output, "Refusing downgrade from 2.0.0 to 1.1.1") {
-		t.Fatalf("downgrade = %+v", r)
+	if r.code != 0 || !strings.Contains(r.output, "Skipping tap downgrade from 2.0.0 to 1.1.1") {
+		t.Fatalf("historical release = %+v", r)
+	}
+	log, err := os.ReadFile(filepath.Join(w.mockDir, "gh.log"))
+	if err != nil || !strings.Contains(string(log), "release create v1.1.1 --repo puppetdevz/ianchor --verify-tag --title v1.1.1 --notes Release v1.1.1 --latest=false") {
+		t.Fatalf("historical release must not become latest: %s, %v", log, err)
 	}
 }
 

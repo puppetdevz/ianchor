@@ -5,23 +5,20 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
-concurrency:
-  group: homebrew-tap-ianchor
-  cancel-in-progress: false
+permissions: {}
 
 jobs:
-  release:
+  verify:
+    permissions:
+      contents: read
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
@@ -54,8 +51,14 @@ jobs:
           GOTOOLCHAIN=local CGO_ENABLED=0 go run ./cmd/ianchor --version
           test -z "$(git status --porcelain --untracked-files=all --ignored)"
 
+  release:
+    needs: verify
+    permissions:
+      contents: write
+    runs-on: macos-latest
+    steps:
       - name: Check out verified commit for publishing
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false

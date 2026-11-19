@@ -59,7 +59,11 @@ Go 重写版以兼容 Node 版命令、输出、退出码、补全脚本和数�
 
 首次发布前，维护者应配置并核实源码仓库对已发布标签的服务端保护（禁止删除或强制更新）；脚本的多次检查并非原子锁，不能单独保证标签不被外部并发移动。还需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-tap`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。若使用 fine-grained PAT，需将 `puppetdevz/homebrew-tap` 纳入授权仓库并授予 Contents 读写权限；旧 token 若只授权旧仓库，必须更新该 secret。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
 
-`scripts/tag.sh` 的版本提交完成后若推送失败，修复原因后可执行 `./scripts/tag.sh resume` 续推当前版本；不要重新运行版本递增命令。该命令要求 HEAD 仍是对应的版本提交，并拒绝移动已有标签。
+`scripts/tag.sh` 要求 `VERSION` 为严格的稳定版本号，检查唯一的 origin 推送地址、远端 main 和标签后，以原子推送同时提交分支和标签；服务端须支持 atomic push，不会回退到分步推送。失败后保留本地版本提交和标签，远端可能已接受推送：检查远端并修复原因后运行 `./scripts/tag.sh resume`，不要重新递增。若远端已包含二者，resume 不会产生新的标签事件；冲突需人工处理，禁止移动标签。
+
+各标签独立验证并发布 GitHub Release；旧版本晚到时创建非 latest Release，但不降低 tap 版本。tap 更新使用基于已验证提交的服务端 CAS，若并发修改导致失败，重新运行该标签的工作流以重新验证（Release 可能已创建）；tap 不可用也会阻止该次 Release 创建，修复后需重跑。旧标签重跑仍使用其自身提交中的工作流，不会自动采用新版发布逻辑。
+
+可在 GitHub Actions 手动运行 **Homebrew acceptance**，选择包含该工作流及 Formula 渲染脚本的分支或标签。它在临时 macOS runner 上下载所选提交的公开源码归档，实际执行 `brew install --build-from-source` 和 `brew test`，不写入真实 tap，也不使用发布 token；源码归档必须可公开下载。此验收不自动运行，工作流尚需在 GitHub runner 上实际执行确认。
 
 工作流用 Ruby 语法树读取元数据，不执行 tap 代码；只接受单个 `Ianchor < Formula` 类中的静态、无条件、直接 DSL 声明。动态/间接调用、条件元数据及不支持的类级结构会在发布前拒绝；维护者应核实实际版本后整理为静态声明再重跑，不要通过移除版本校验绕过。Release 查询失败只输出脱敏分类及修复指引，不回显原始错误。
 

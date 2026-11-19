@@ -1,0 +1,65 @@
+name: Homebrew acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    runs-on: macos-latest
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+      HOMEBREW_NO_INSTALL_UPGRADE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install and test the checked-out commit
+        shell: bash
+        env:
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          commit=$(git rev-parse --verify 'HEAD^{commit}')
+          if [[ ! "$commit" =~ ^[0-9a-f]{40}$ || "$commit" != "$EXPECTED_COMMIT" ]]; then
+            echo '::error::Checkout does not match the dispatch commit' >&2
+            exit 1
+          fi
+          if [[ ! "$SOURCE_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo '::error::Invalid source repository' >&2
+            exit 1
+          fi
+
+          cellar=$(brew --cellar)
+          prefix=$(brew --prefix)
+          if [[ -e "$cellar/ianchor" || -L "$cellar/ianchor" || -e "$prefix/bin/ianchor" || -L "$prefix/bin/ianchor" ]]; then
+            echo '::error::An ianchor installation or executable already exists; refusing to overwrite it' >&2
+            exit 1
+          fi
+
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          version=$(tr -d '[:space:]' < VERSION)
+          url="https://github.com/${SOURCE_REPOSITORY}/archive/${commit}.tar.gz"
+          curl --fail --location --retry 3 --output "$work/source.tar.gz" "$url"
+          sha256=$(shasum -a 256 "$work/source.tar.gz" | awk '{print $1}')
+          ruby scripts/release/render.rb Formula/ianchor.rb "$work/ianchor.rb" \
+            "$version" "$url" "$sha256" scripts/release/metadata.rb
+          ruby -c "$work/ianchor.rb"
+
+          {
+            echo "Commit: $commit"
+            echo "Version: $version"
+            echo "Architecture: $(uname -m)"
+            echo "Archive SHA256: $sha256"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          brew install --build-from-source "$work/ianchor.rb"
+          brew test "$work/ianchor.rb"
