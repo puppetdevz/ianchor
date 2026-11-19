@@ -28,6 +28,11 @@ func newHarness(t *testing.T) *harness {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("TERM", "xterm-256color")
+	// Keep Azure Pipelines detection from forcing color in plain-output tests.
+	for _, name := range []string{"TF_BUILD", "AGENT_NAME"} {
+		t.Setenv(name, "")
+		os.Unsetenv(name)
+	}
 	base := filepath.Join(home, "Library", "Mobile Documents", "com~apple~CloudDocs")
 	configDir := filepath.Join(base, "ianchor")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
