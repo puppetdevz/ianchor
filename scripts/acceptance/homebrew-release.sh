@@ -3,7 +3,15 @@
 set -euo pipefail
 : "${RUNNER_TEMP:?}" "${GITHUB_ACTIONS:?}" "${EXPECTED_ARCH:?}" "${TAG:?}" "${ASSET_DIR:?}"
 [[ "$GITHUB_ACTIONS" = true && "${RUNNER_ENVIRONMENT:-}" = github-hosted ]] || { echo 'Refusing non-ephemeral runner' >&2; exit 1; }
-[[ "$(uname -m)" = "$EXPECTED_ARCH" && "$(arch)" = "$EXPECTED_ARCH" ]] || { echo 'Non-native runner' >&2; exit 1; }
+[[ "$(uname -m)" = "$EXPECTED_ARCH" ]] || { echo "Non-native runner: uname -m is $(uname -m)" >&2; exit 1; }
+# /usr/bin/arch reports the i386 family on Intel macOS, so it is not a valid
+# native-architecture probe; use sysctl instead to reject Rosetta translation.
+[[ "${HOMEBREW_ARCH:-}" = "" && "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 0 ]] || { echo 'Running under translation' >&2; exit 1; }
+if [[ "$EXPECTED_ARCH" = arm64 ]]; then
+  [[ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = 1 ]] || { echo 'Not an Apple Silicon host' >&2; exit 1; }
+else
+  [[ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = 0 ]] || { echo 'Not an Intel host' >&2; exit 1; }
+fi
 case "$EXPECTED_ARCH" in arm64) goarch=arm64;; x86_64) goarch=amd64;; *) exit 1;; esac
 bash scripts/acceptance/release-assets.sh verify "$ASSET_DIR" "$TAG"
 version=${TAG#v}; old=28522afbc47f8abec9590dbdfe10de1503bf2b53
