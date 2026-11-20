@@ -17,6 +17,18 @@ bash scripts/acceptance/release-assets.sh verify "$ASSET_DIR" "$TAG"
 version=${TAG#v}; old=28522afbc47f8abec9590dbdfe10de1503bf2b53
 [[ "$(git rev-parse 'refs/tags/v2.0.2^{commit}')" = "$old" ]] || { echo 'Unexpected v2.0.2 tag' >&2; exit 1; }
 cellar=$(brew --cellar); prefix=$(brew --prefix); repo=$(brew --repository)
+# The published 2.0.2 formula needs Homebrew 6.0.20 or newer (formula-level
+# fetch phase). A stale runner image can be older, so update Homebrew itself
+# before testing the upgrade; that matches the documented install prerequisite.
+minimum_brew_version=6.0.20
+brew_version=$(brew --version | awk 'NR==1{print $2}')
+at_least() { ruby -e 'exit(Gem::Version.new(ARGV[0]) >= Gem::Version.new(ARGV[1]) ? 0 : 1)' "$1" "$2"; }
+if ! at_least "$brew_version" "$minimum_brew_version"; then
+  echo "Homebrew $brew_version is older than $minimum_brew_version; updating before the 2.0.2 upgrade test"
+  HOMEBREW_NO_AUTO_UPDATE= brew update --force
+  brew_version=$(brew --version | awk 'NR==1{print $2}')
+  at_least "$brew_version" "$minimum_brew_version" || { echo "Homebrew $brew_version cannot install the published 2.0.2 formula" >&2; exit 1; }
+fi
 tap="$repo/Library/Taps/puppetdevz/homebrew-tap"
 for path in "$cellar/ianchor" "$prefix/bin/ianchor" "$tap"; do
   [[ ! -e "$path" && ! -L "$path" ]] || { echo "Refusing existing path: $path" >&2; exit 1; }
@@ -91,4 +103,4 @@ check_install 2.0.2
 cp "$work/new.rb" "$tap/Formula/ianchor.rb"
 brew upgrade puppetdevz/tap/ianchor
 check_install "$version"
-echo "Verified $TAG ($goarch), fresh install and upgrade from 2.0.2"
+echo "Verified $TAG ($goarch) with Homebrew $brew_version, fresh install and upgrade from 2.0.2"
