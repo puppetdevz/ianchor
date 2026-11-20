@@ -2,6 +2,22 @@
 
 [简体中文](CHANGELOG.md)
 
+## 2.1.0 - 2026-11-20
+
+### Features
+
+- The Homebrew Formula installs a prebuilt Go binary for Apple Silicon or Intel; installation no longer requires Go, source compilation, or downloading Go modules, and continues to use `puppetdevz/tap/ianchor`.
+- Before release, native macOS GitHub runners for both architectures use an isolated tap to verify fresh installation, completions, and an upgrade from the 2.0.2 source build using the same assets; either failed gate prevents publication.
+
+### Release Safety
+
+- Each architecture archive has its own SHA256; same-name Release assets are never overwritten. The tap is updated only after both public downloads are verified, with downgrade and concurrent-change checks retained.
+- An interruption may leave an incomplete Release or assets requiring manual intervention; check GitHub's latest marker when different versions publish concurrently. See the README for recovery.
+
+### Notes
+
+- The support target is macOS 13 or later, but runner acceptance does not establish that macOS 13 has been tested. Apple signing and notarization are not enforced for the binaries.
+
 ## 2.0.2 - 2026-11-20
 
 ### Fixed

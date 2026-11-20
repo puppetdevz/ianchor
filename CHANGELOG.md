@@ -2,6 +2,22 @@
 
 [English](CHANGELOG.en.md)
 
+## 2.1.0 - 2026-11-20
+
+### 新功能
+
+- Homebrew Formula 按 Apple Silicon 或 Intel 架构安装预编译的 Go 二进制；安装无需 Go、源码编译或下载 Go 模块，继续使用 `puppetdevz/tap/ianchor`。
+- 发布前在两种原生 macOS GitHub runner 上，使用隔离 tap 验证同一批资产的全新安装、补全和从 2.0.2 源码版升级；任一验收失败时不发布。
+
+### 发布安全
+
+- 每个架构的归档单独校验 SHA256，同名 Release 资产不覆盖；仅在公开下载的两份资产均校验通过后更新 tap，并保留版本防降级和并发变更检查。
+- 发布中断可能留下不完整 Release 或待人工处理的资产；不同版本并发发布时，应检查 GitHub latest 标记。恢复方式见 README。
+
+### 注意事项
+
+- 支持目标为 macOS 13 及以上，但本次 runner 验收不代表已测试 macOS 13；未对二进制强制 Apple 签名或公证。
+
 ## 2.0.2 - 2026-11-20
 
 ### 修复

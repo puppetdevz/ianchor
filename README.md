@@ -23,7 +23,7 @@ brew install puppetdevz/tap/ianchor
 
 此个人 tap 对应仓库 [puppetdevz/homebrew-tap](https://github.com/puppetdevz/homebrew-tap)。
 
-从采用新版发布流程的下一个版本起，Formula 将按架构安装预编译二进制，用户安装时无需 Go、源码编译或下载 Go 模块，也不需要 Node 或 Python。SQLite 通过纯 Go 实现（`modernc.org/sqlite`）编入二进制。已发布的 2.0.2 仍是源码构建版。安装需要 Homebrew 6.0.20 或更新版本；支持目标为 macOS 13 及以上的 Apple Silicon 与 Intel，但发布门禁所用 runner 的系统版本不代表已实测 macOS 13。
+从 2.1.0 起，Formula 按架构安装预编译二进制，用户安装时无需 Go、源码编译或下载 Go 模块，也不需要 Node 或 Python。SQLite 通过纯 Go 实现（`modernc.org/sqlite`）编入二进制。已发布的 2.0.2 仍是源码构建版。安装需要 Homebrew 6.0.20 或更新版本；支持目标为 macOS 13 及以上的 Apple Silicon 与 Intel，但发布门禁所用 runner 的系统版本不代表已实测 macOS 13。
 
 ## 升级
 

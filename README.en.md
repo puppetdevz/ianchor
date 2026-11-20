@@ -23,7 +23,7 @@ brew install puppetdevz/tap/ianchor
 
 This personal tap is hosted at [puppetdevz/homebrew-tap](https://github.com/puppetdevz/homebrew-tap).
 
-Starting with the next release using the new pipeline, the Formula installs a prebuilt binary for the host architecture: users need neither Go, source compilation, Go module downloads, Node nor Python. SQLite is compiled in through the pure-Go `modernc.org/sqlite` driver. The already-published 2.0.2 release still builds from source. Installation requires Homebrew 6.0.20 or newer; the support target is macOS 13 or newer on Apple Silicon and Intel, but the release runners' OS versions do not establish that macOS 13 has been tested.
+Starting with 2.1.0, the Formula installs a prebuilt binary for the host architecture: users need neither Go, source compilation, Go module downloads, Node nor Python. SQLite is compiled in through the pure-Go `modernc.org/sqlite` driver. The already-published 2.0.2 release still builds from source. Installation requires Homebrew 6.0.20 or newer; the support target is macOS 13 or newer on Apple Silicon and Intel, but the release runners' OS versions do not establish that macOS 13 has been tested.
 
 ## Upgrade
 
