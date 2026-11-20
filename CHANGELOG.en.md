@@ -2,6 +2,17 @@
 
 [简体中文](CHANGELOG.md)
 
+## 2.0.2 - 2026-11-20
+
+### Fixed
+
+- Separate release verification from write permissions, pin Actions versions, and prevent a shared concurrency group from replacing pending tag release runs.
+- Protect version commits, tags, and tap updates with atomic pushes and server-side checks. A late older version still creates a non-latest Release without downgrading the tap; inspect and rerun after a concurrent conflict or tap outage.
+
+### Maintenance
+
+- Add a manually triggered Homebrew source-install and test workflow that uses neither the real tap nor a release token; it has not yet been exercised on a GitHub runner.
+
 ## 2.0.1 - 2026-11-19
 
 ### Fixed
