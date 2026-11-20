@@ -1,12 +1,15 @@
 package release_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -23,6 +26,7 @@ type workspace struct {
 	tapWork    string // working clone used by tests to inspect the tap
 	mockDir    string // directory holding mock state files
 	sourceBare string
+	assets     string
 	commit     string
 }
 
@@ -55,6 +59,13 @@ func newWorkspace(t *testing.T) *workspace {
 	if err := os.MkdirAll(w.mockDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.assets = filepath.Join(root, "assets")
+	if err := os.MkdirAll(w.assets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, arch := range []string{"arm64", "amd64"} {
+		writeAsset(t, filepath.Join(w.assets, assetName(arch)), arch)
+	}
 	w.writeMock("curl", `#!/bin/bash
 set -euo pipefail
 out=""
@@ -62,18 +73,15 @@ url=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --output) out="$2"; shift 2 ;;
-    --retry) shift 2 ;;
+    --retry|--proto|--proto-redir) shift 2 ;;
     --fail|--location) shift ;;
     https://*) url="$1"; shift ;;
     *) exit 1 ;;
   esac
 done
-[ "$url" = "https://github.com/puppetdevz/ianchor/archive/$EXPECTED_COMMIT.tar.gz" ] || exit 1
-if [ -n "${MOCK_SOURCE_ARCHIVE:-}" ]; then
-  cp "$MOCK_SOURCE_ARCHIVE" "$out"
-else
-  printf 'fake source archive' > "$out"
-fi
+name="${url##*/}"
+[ "$url" = "https://github.com/puppetdevz/ianchor/releases/download/v1.1.1/$name" ] || exit 1
+if [ "${MOCK_BAD_DOWNLOAD:-}" = "$name" ]; then printf bad > "$out"; else cp "$MOCK_DIR/remote/$name" "$out"; fi
 `)
 	w.writeMock("gh", `#!/bin/bash
 set -euo pipefail
@@ -86,18 +94,36 @@ case "$1" in
   api)
     case "$*" in
       *"--include"*)
-        printf 'HTTP/2.0 %s\r\n\r\n%s\n' "${MOCK_GH_STATUS:-404}" "${MOCK_GH_BODY:-{\}}"
+        status="${MOCK_GH_STATUS:-404}"
+        [ ! -f "$MOCK_DIR/created" ] || status=200
+        body='{"tag_name":"v1.1.1","draft":false,"prerelease":false,"id":42}'
+        [ -z "${MOCK_GH_BODY:-}" ] || body="$MOCK_GH_BODY"
+        printf 'HTTP/2.0 %s\r\n\r\n%s\n' "$status" "$body"
         printf '%s' "${MOCK_GH_STDERR:-}" >&2
-        [ "${MOCK_GH_STATUS:-404}" = "200" ] && exit 0
+        [ "$status" = 200 ] && exit 0
         exit 1
+        ;;
+      *"--paginate"*)
+        ruby -rjson -e 'puts [Dir.children(ARGV[0]).sort.map { |n| {name: n, state: "uploaded"} }].to_json' "$MOCK_DIR/remote"
         ;;
       *) exit "${MOCK_GH_REPO_EXIT:-0}" ;;
     esac
     ;;
-  release) exit 0 ;;
+  release)
+    case "$2" in
+      create) touch "$MOCK_DIR/created" ;;
+      upload)
+        name="${4##*/}"
+        if [ "${MOCK_UPLOAD_FAIL:-}" != "missing" ]; then cp "$4" "$MOCK_DIR/remote/$name"; fi
+        if [ -n "${MOCK_UPLOAD_FAIL:-}" ]; then exit 1; fi
+        ;;
+    esac ;;
 esac
 exit 0
 `)
+	if err := os.MkdirAll(filepath.Join(w.mockDir, "remote"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	run(t, root, "git", "init", "-q", "-b", "main")
 	run(t, root, "git", "add", "Formula/ianchor.rb", "VERSION", "scripts/release")
 	run(t, root, "git", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "source")
@@ -190,6 +216,7 @@ func (w *workspace) publish(env map[string]string) publishResult {
 		"PATH="+w.bin+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"HOME="+filepath.Join(w.root, "home"),
 		"MOCK_DIR="+w.mockDir,
+		"ASSET_DIR="+w.assets,
 		"MOCK_TAP_WORK="+w.tapWork,
 		"IANCHOR_TAP_URL=file://"+w.tapBare,
 		"IANCHOR_SOURCE_URL=file://"+w.sourceBare,
@@ -214,131 +241,76 @@ func (w *workspace) publish(env map[string]string) publishResult {
 	return publishResult{output: string(out), code: code}
 }
 
+func assetName(arch string) string { return "ianchor_1.1.1_darwin_" + arch + ".tar.gz" }
+
+// Construct a minimal structurally valid Mach-O fixture, not a runnable program.
+func writeAsset(t *testing.T, path, arch string) {
+	t.Helper()
+	cpu := uint32(0x0100000c)
+	if arch == "amd64" {
+		cpu = 0x01000007
+	}
+	mach := make([]byte, 104)
+	copy(mach, []byte{0xcf, 0xfa, 0xed, 0xfe})
+	binary.LittleEndian.PutUint32(mach[4:], cpu)
+	binary.LittleEndian.PutUint32(mach[12:], 2)
+	binary.LittleEndian.PutUint32(mach[16:], 1)
+	binary.LittleEndian.PutUint32(mach[20:], 72)
+	binary.LittleEndian.PutUint32(mach[32:], 0x19)
+	binary.LittleEndian.PutUint32(mach[36:], 72)
+	binary.LittleEndian.PutUint64(mach[32+48:], uint64(len(mach)))
+	binary.LittleEndian.PutUint32(mach[32+60:], 4)
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: "ianchor", Mode: 0755, Size: int64(len(mach)), Format: tar.FormatUSTAR}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(mach); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFormulaInstallAndTestInIsolatedHarness(t *testing.T) {
-	source, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
 	w := newWorkspace(t)
-	// Put the actual Go source in the isolated tagged commit. The Formula
-	// must build its immutable source archive, not the live working directory.
-	for _, rel := range []string{"go.mod", "go.sum", "version.go"} {
-		copyFile(t, filepath.Join(source, rel), filepath.Join(w.root, rel))
-	}
-	for _, rel := range []string{"cmd", "internal"} {
-		err := filepath.WalkDir(filepath.Join(source, rel), func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if entry.IsDir() {
-				return nil
-			}
-			relative, err := filepath.Rel(source, path)
-			if err != nil {
-				return err
-			}
-			copyFile(t, path, filepath.Join(w.root, relative))
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	run(t, w.root, "git", "add", "go.mod", "go.sum", "version.go", "cmd", "internal")
-	run(t, w.root, "git", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "build source")
-	w.commit = strings.TrimSpace(run(t, w.root, "git", "rev-parse", "HEAD"))
-	run(t, w.root, "git", "tag", "-f", "v1.1.1")
-	run(t, w.root, "git", "push", "-q", "--force", w.sourceBare, "main", "refs/tags/v1.1.1")
-	archive := filepath.Join(t.TempDir(), "source.tar.gz")
-	run(t, w.root, "git", "archive", "--format=tar.gz", "--prefix=ianchor/", "--output="+archive, w.commit)
 	w.commitTap("")
-	if result := w.publish(map[string]string{"MOCK_SOURCE_ARCHIVE": archive}); result.code != 0 {
-		t.Fatalf("render formula: %s", result.output)
-	}
-	formula := w.tapFormula()
-	archiveBytes, err := os.ReadFile(archive)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(formula, fmt.Sprintf("%x", sha256.Sum256(archiveBytes))) || !strings.Contains(formula, w.commit) {
-		t.Fatal("Formula does not identify the exact immutable archive")
+	if r := w.publish(nil); r.code != 0 {
+		t.Fatal(r.output)
 	}
 	root := t.TempDir()
-	run(t, root, "tar", "-xzf", archive)
-	buildSource := filepath.Join(root, "ianchor")
-	formulaPath := filepath.Join(root, "ianchor.rb")
-	if err := os.WriteFile(formulaPath, []byte(formula), 0600); err != nil {
+	formula := filepath.Join(root, "formula.rb")
+	if err := os.WriteFile(formula, []byte(w.tapFormula()), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// The harness changes HOME, so preserve the caller's module cache instead
-	// of defaulting to an empty cache under the temporary home.
-	moduleCache := strings.TrimSpace(run(t, source, "go", "env", "GOMODCACHE"))
-	if moduleCache == "" {
-		t.Fatal("Go module cache path is empty")
-	}
-	harnessEnv := append(os.Environ(), "HOME="+root, "GOTOOLCHAIN=local", "CGO_ENABLED=0", "GOMODCACHE="+moduleCache)
-	// First exercise the actual Formula install from the unmodified archive;
-	// its installed binary's version and completion generation are checked.
-	exact := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, filepath.Join(root, "exact"), "install-only")
-	exact.Dir = buildSource
-	exact.Env = harnessEnv
-	if out, err := exact.CombinedOutput(); err != nil {
-		t.Fatalf("exact archive Formula install: %v\n%s", err, out)
-	}
-	// Relocate the coordinator only in this extracted test copy so the
-	// stateful roundtrip cannot touch the user's shared lock. The archive and
-	// rendered checksum above remain unchanged.
-	shared := filepath.Join(root, "shared")
-	if err := os.Mkdir(shared, 0o700); err != nil {
+	// Stand-in is deliberately not the synthetic Mach-O archive fixture.
+	if err := os.WriteFile(filepath.Join(root, "ianchor"), []byte("#!/bin/sh\ncase \"$*\" in *--version*) echo 1.1.1 ;; *zsh*) echo '#compdef ianchor' ;; *bash*) echo complete ;; esac\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	coordinatorSource := filepath.Join(buildSource, "internal", "coordinator", "coordinator.go")
-	content, err := os.ReadFile(coordinatorSource)
+	harness, err := filepath.Abs("testdata/formula_harness.rb")
 	if err != nil {
 		t.Fatal(err)
 	}
-	const originalParent = `"/Users/Shared"`
-	if strings.Count(string(content), originalParent) != 1 {
-		t.Fatal("unexpected coordinator source")
-	}
-	isolated := strings.Replace(string(content), originalParent, strconv.Quote(shared), 1)
-	if err := os.WriteFile(coordinatorSource, []byte(isolated), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, root)
-	cmd.Dir = buildSource
-	cmd.Env = harnessEnv
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("isolated Formula harness: %v\n%s", err, out)
-	}
-	wrong := strings.Replace(formula, `version "1.1.1"`, `version "9.9.9"`, 1)
-	if wrong == formula {
-		t.Fatal("rendered Formula has unexpected version")
-	}
-	badPath := filepath.Join(root, "bad.rb")
-	if err := os.WriteFile(badPath, []byte(wrong), 0600); err != nil {
-		t.Fatal(err)
-	}
-	bad := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), badPath, filepath.Join(root, "bad"))
-	bad.Dir = buildSource
-	bad.Env = harnessEnv
-	if output, err := bad.CombinedOutput(); err == nil || !strings.Contains(string(output), "9.9.9") {
-		t.Fatalf("wrong Formula version not rejected: %v\n%s", err, output)
-	}
-	missingFetch := exec.Command("ruby", filepath.Join(source, "internal/release/testdata/formula_harness.rb"), formulaPath, filepath.Join(root, "missing-fetch"), "skip-fetch")
-	missingFetch.Dir = buildSource
-	missingFetch.Env = harnessEnv
-	if output, err := missingFetch.CombinedOutput(); err == nil || !strings.Contains(string(output), "requires Homebrew 6.0.20 or newer") {
-		t.Fatalf("missing fetch phase not rejected: %v\n%s", err, output)
-	}
-	for _, shell := range []string{"bash", "zsh"} {
-		want, err := os.ReadFile(filepath.Join(source, "internal/completions/assets/ianchor."+shell))
+	for _, arch := range []string{"arm64", "amd64"} {
+		data, err := os.ReadFile(filepath.Join(w.assets, assetName(arch)))
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := os.ReadFile(filepath.Join(root, "completions", shell))
-		if err != nil || string(got) != string(want) {
-			t.Fatalf("%s completion mismatch: %v", shell, err)
+		sum := sha256.Sum256(data)
+		url := "https://github.com/puppetdevz/ianchor/releases/download/v1.1.1/" + assetName(arch)
+		cmd := exec.Command("ruby", harness, formula, filepath.Join(root, arch), url, fmt.Sprintf("%x", sum))
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(), "ARCH="+arch)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s harness: %v\n%s", arch, err, out)
 		}
 	}
 }
@@ -445,18 +417,23 @@ func TestPublishCreatesFormula(t *testing.T) {
 	}
 	formula := w.tapFormula()
 	for _, want := range []string{
-		`version "1.1.1"`,
-		`url "https://github.com/puppetdevz/ianchor/archive/` + w.commit + `.tar.gz"`,
-		`depends_on "go" => :build`,
-		`sha256 "`,
+		`version "1.1.1"`, `on_arm do`, `on_intel do`,
+		`url "https://github.com/puppetdevz/ianchor/releases/download/v1.1.1/` + assetName("arm64") + `"`,
+		`url "https://github.com/puppetdevz/ianchor/releases/download/v1.1.1/` + assetName("amd64") + `"`,
 	} {
 		if !strings.Contains(formula, want) {
 			t.Fatalf("formula missing %q:\n%s", want, formula)
 		}
 	}
-	sum := sha256.Sum256([]byte("fake source archive"))
-	if !strings.Contains(formula, fmt.Sprintf(`sha256 "%x"`, sum)) {
-		t.Fatalf("formula checksum does not match downloaded bytes: %s", formula)
+	for _, arch := range []string{"arm64", "amd64"} {
+		data, err := os.ReadFile(filepath.Join(w.assets, assetName(arch)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		if !strings.Contains(formula, fmt.Sprintf(`sha256 "%x"`, sum)) {
+			t.Fatalf("missing %s checksum: %s", arch, formula)
+		}
 	}
 	if strings.Contains(formula, "__IANCHOR_") {
 		t.Fatalf("unresolved placeholders:\n%s", formula)
@@ -502,7 +479,7 @@ func TestPublishRetryAfterTapPushFailure(t *testing.T) {
 	if w.tapFormula() != "" {
 		t.Fatal("failed push updated tap")
 	}
-	if r := w.publish(map[string]string{"MOCK_GH_STATUS": "200", "MOCK_GH_BODY": `{"tag_name":"v1.1.1","draft":false,"prerelease":false}`}); r.code != 0 {
+	if r := w.publish(map[string]string{"MOCK_GH_STATUS": "200", "MOCK_GH_BODY": `{"tag_name":"v1.1.1","draft":false,"prerelease":false,"id":42}`}); r.code != 0 {
 		t.Fatalf("retry failed: %s", r.output)
 	}
 	if w.tapFormula() == "" {
@@ -683,7 +660,7 @@ func TestPublishSurvivesExistingRelease(t *testing.T) {
 	w.commitTap("")
 	r := w.publish(map[string]string{
 		"MOCK_GH_STATUS": "200",
-		"MOCK_GH_BODY":   `{"tag_name":"v1.1.1","draft":false,"prerelease":false}`,
+		"MOCK_GH_BODY":   `{"tag_name":"v1.1.1","draft":false,"prerelease":false,"id":42}`,
 	})
 	if r.code != 0 {
 		t.Fatalf("publish failed: %s", r.output)
@@ -768,8 +745,99 @@ func TestRenderRejectsInvalidChecksum(t *testing.T) {
 	w.commitTap("")
 	defer w.assertTapUnchanged()()
 	r := w.publish(nil)
-	if r.code == 0 || !strings.Contains(r.output, "Invalid archive SHA256") {
+	if r.code == 0 || !strings.Contains(r.output, "Invalid target checksum") {
 		t.Fatalf("checksum = %+v", r)
+	}
+}
+
+func TestPublishAssetSafety(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		setup      func(*workspace)
+		env        map[string]string
+	}{
+		{"missing", "Missing or invalid asset", func(w *workspace) {
+			if err := os.Remove(filepath.Join(w.assets, assetName("arm64"))); err != nil {
+				t.Fatal(err)
+			}
+		}, nil},
+		{"wrong architecture", "Wrong executable architecture", func(w *workspace) { writeAsset(t, filepath.Join(w.assets, assetName("arm64")), "amd64") }, nil},
+		{"existing different bytes", "Public release asset differs", func(w *workspace) {
+			if err := os.WriteFile(filepath.Join(w.mockDir, "remote", assetName("amd64")), []byte("other"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}, nil},
+		{"download mismatch", "Public release asset differs", func(w *workspace) {}, map[string]string{"MOCK_BAD_DOWNLOAD": assetName("arm64")}},
+		{"upload failure missing", "Release asset is still missing", func(w *workspace) {}, map[string]string{"MOCK_UPLOAD_FAIL": "missing"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorkspace(t)
+			w.commitTap("")
+			defer w.assertTapUnchanged()()
+			tc.setup(w)
+			r := w.publish(tc.env)
+			if r.code == 0 || !strings.Contains(r.output, tc.want) {
+				t.Fatalf("result: %+v", r)
+			}
+			if tc.name == "existing different bytes" && strings.Contains(readFile(t, filepath.Join(w.mockDir, "gh.log")), "release upload") {
+				t.Fatal("uploaded before checking all existing assets")
+			}
+		})
+	}
+}
+
+func TestPublishUploadFailureAfterSuccess(t *testing.T) {
+	w := newWorkspace(t)
+	w.commitTap("")
+	if r := w.publish(map[string]string{"MOCK_UPLOAD_FAIL": "after"}); r.code != 0 || !strings.Contains(r.output, "Upload failed") {
+		t.Fatalf("result: %+v", r)
+	}
+	if w.tapFormula() == "" {
+		t.Fatal("matching uploaded bytes did not publish formula")
+	}
+}
+
+func TestPublishRejectsChangedBinaryIdentity(t *testing.T) {
+	for _, arch := range []string{"arm64", "amd64"} {
+		t.Run(arch, func(t *testing.T) {
+			w := newWorkspace(t)
+			w.commitTap("")
+			if r := w.publish(nil); r.code != 0 {
+				t.Fatal(r.output)
+			}
+			defer w.assertTapUnchanged()()
+			path := filepath.Join(w.assets, assetName(arch))
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// gzip header timestamp changes the archive identity without changing its contents.
+			data[4] = 1
+			if err := os.WriteFile(path, data, 0644); err != nil {
+				t.Fatal(err)
+			}
+			r := w.publish(nil)
+			if r.code == 0 || !strings.Contains(r.output, "Refusing to change binary identity") {
+				t.Fatalf("result: %+v", r)
+			}
+		})
+	}
+}
+
+func TestPublishRejectsMaliciousStaticRuby(t *testing.T) {
+	for _, payload := range []string{`system "touch", ENV["MOCK_DIR"] + "/pwned"`, "`touch $MOCK_DIR/pwned`", `x = File.write(ENV["MOCK_DIR"] + "/pwned", "x")`} {
+		t.Run(payload, func(t *testing.T) {
+			w := newWorkspace(t)
+			w.commitTap("class Ianchor < Formula\n  " + payload + "\nend\n")
+			defer w.assertTapUnchanged()()
+			r := w.publish(nil)
+			if r.code == 0 {
+				t.Fatalf("malicious Ruby accepted: %+v", r)
+			}
+			if _, err := os.Stat(filepath.Join(w.mockDir, "pwned")); !os.IsNotExist(err) {
+				t.Fatal("tap Ruby was executed")
+			}
+		})
 	}
 }
 

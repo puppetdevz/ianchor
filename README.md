@@ -23,7 +23,7 @@ brew install puppetdevz/tap/ianchor
 
 此个人 tap 对应仓库 [puppetdevz/homebrew-tap](https://github.com/puppetdevz/homebrew-tap)。
 
-Formula 从源码构建 Go 程序，`go` 仅作为构建依赖，运行时不需要 Node，也不受 nvm 等 PATH 配置影响。SQLite 由纯 Go 实现（`modernc.org/sqlite`）静态编译进二进制，安装后没有原生模块、Node ABI 或 Python 依赖。安装时需要 Homebrew 6.0.20 或更新版本；安装会在构建前联网下载 Go 模块，构建阶段禁用网络并使用 Homebrew 的 `go`；支持 macOS 13 及以上的 Apple Silicon 与 Intel。
+从采用新版发布流程的下一个版本起，Formula 将按架构安装预编译二进制，用户安装时无需 Go、源码编译或下载 Go 模块，也不需要 Node 或 Python。SQLite 通过纯 Go 实现（`modernc.org/sqlite`）编入二进制。已发布的 2.0.2 仍是源码构建版。安装需要 Homebrew 6.0.20 或更新版本；支持目标为 macOS 13 及以上的 Apple Silicon 与 Intel，但发布门禁所用 runner 的系统版本不代表已实测 macOS 13。
 
 ## 升级
 
@@ -55,19 +55,19 @@ Go 重写版以兼容 Node 版命令、输出、退出码、补全脚本和数�
 
 ## 发布维护
 
-源码仓库的 `Formula/ianchor.rb` 是带占位符的权威模板，不能直接安装。稳定版 `vMAJOR.MINOR.PATCH` 标签必须与 `VERSION` 文件一致；Actions 使用该标签提交中的模板和源码归档 SHA256，将完整 Formula 同步到 tap 的 `main`，不在 tap 单独维护安装逻辑。预发布标签会被拒绝。标签不可移动：已存在的标签不会被删除或重指，修模板须发新版本。
+源码仓库的 `Formula/ianchor.rb` 是带占位符的权威模板，不能直接安装。稳定版 `vMAJOR.MINOR.PATCH` 标签必须与 `VERSION` 文件一致；Actions 使用标签提交中的模板以及两个架构归档各自的 SHA256，将完整 Formula 同步到 tap 的 `main`，不在 tap 单独维护安装逻辑。预发布标签会被拒绝。标签不可移动：已存在的标签不会被删除或重指，修模板须发新版本。
 
 首次发布前，维护者应配置并核实源码仓库对已发布标签的服务端保护（禁止删除或强制更新）；脚本的多次检查并非原子锁，不能单独保证标签不被外部并发移动。还需准备已存在、`main` 至少有一个提交的 `puppetdevz/homebrew-tap`，并在源码仓库配置可直接写入该分支的 `HOMEBREW_TAP_TOKEN`。若使用 fine-grained PAT，需将 `puppetdevz/homebrew-tap` 纳入授权仓库并授予 Contents 读写权限；旧 token 若只授权旧仓库，必须更新该 secret。缺少 `Formula/` 或目标 Formula 会自动创建；工作流不会创建仓库或修改分支保护。发布仅由维护者主动触发 release 流程，不移动旧标签来套用新工作流。
 
 `scripts/tag.sh` 要求 `VERSION` 为严格的稳定版本号，检查唯一的 origin 推送地址、远端 main 和标签后，以原子推送同时提交分支和标签；服务端须支持 atomic push，不会回退到分步推送。失败后保留本地版本提交和标签，远端可能已接受推送：检查远端并修复原因后运行 `./scripts/tag.sh resume`，不要重新递增。若远端已包含二者，resume 不会产生新的标签事件；冲突需人工处理，禁止移动标签。
 
-各标签独立验证并发布 GitHub Release；旧版本晚到时创建非 latest Release，但不降低 tap 版本。tap 更新使用基于已验证提交的服务端 CAS，若并发修改导致失败，重新运行该标签的工作流以重新验证（Release 可能已创建）；tap 不可用也会阻止该次 Release 创建，修复后需重跑。旧标签重跑仍使用其自身提交中的工作流，不会自动采用新版发布逻辑。
+各标签独立验证并发布 GitHub Release；旧版本晚到且已观察到较新 tap 版本时创建非 latest Release，不降低 tap 版本。同一标签的发布 job 串行，但不同标签可并发；并发时 latest 状态取决于 GitHub 的发布时序，应检查并在必要时人工纠正。tap 更新使用基于已验证提交的服务端 CAS，若并发修改导致失败，重新运行该标签的工作流以重新验证（Release 可能已创建）；tap 不可用也会阻止该次 Release 创建，修复后需重跑。Release 在两个资产上传完毕前可能已公开，中断后须检查并恢复。旧标签重跑仍使用其自身提交中的工作流，不会自动采用新版发布逻辑。
 
-可在 GitHub Actions 手动运行 **Homebrew acceptance**，选择包含该工作流及 Formula 渲染脚本的分支或标签。它在临时 macOS runner 上下载所选提交的公开源码归档，实际执行 `brew install --build-from-source` 和 `brew test`，不写入真实 tap，也不使用发布 token；源码归档必须可公开下载。此验收不自动运行，工作流尚需在 GitHub runner 上实际执行确认。
+发布工作流在生成归档后，使用 Apple Silicon 和 Intel 的临时 macOS runner，在隔离 tap 中分别执行真实的全新安装、`brew test` 和从 2.0.2 源码版升级；任一门禁失败均阻止正式发布。它们验证的是随后上传的同一批归档，不写真实 tap，也不使用发布 token。**Homebrew acceptance** 也可手动运行：选择包含新版工作流的分支或稳定标签，测试要求 `VERSION` 高于 2.0.2。旧版升级测试仍需要联网下载源码和 Go 模块；验收工作流本身须在 GitHub runner 上实际运行才能证明通过。
 
-工作流用 Ruby 语法树读取元数据，不执行 tap 代码；只接受单个 `Ianchor < Formula` 类中的静态、无条件、直接 DSL 声明。动态/间接调用、条件元数据及不支持的类级结构会在发布前拒绝；维护者应核实实际版本后整理为静态声明再重跑，不要通过移除版本校验绕过。Release 查询失败只输出脱敏分类及修复指引，不回显原始错误。
+工作流用 Ruby 语法树读取元数据，不执行 tap 代码；只接受可安全识别的静态 Formula 声明，包括受支持的架构分支。动态/间接元数据及不支持的类级结构会在发布前拒绝；维护者应核实实际版本后整理为静态声明再重跑，不要通过移除版本校验绕过。Release 查询失败只输出脱敏分类及修复指引，不回显原始错误。
 
-同一版本/内容重跑不重复创建 Release 或提交，旧版本不得覆盖更高版本。同版本重跑可将 tap 恢复为该标签模板的渲染结果；标签创建后的模板修复需随新版本发布，不移动旧标签。Release 已创建而 tap 推送失败时保留 Release；修复权限/网络或远端竞争后可重跑同一标签。CI 用 `go vet`、`go test`、`go test -race` 和 darwin/amd64、darwin/arm64 交叉构建验证源码，但不代表两个架构都已在实机验证。本地测试要求所有含语句的包保持 100% 语句覆盖，门禁为 `./scripts/coverage-check.sh <coverprofile>`：它按函数逐项要求 100.0%，并按整数统计要求零条未覆盖语句，因此 `go tool cover -func` 四舍五入后的总计无法掩盖缺口。覆盖错误分支的注入点默认调用真实实现。Formula 测试检查版本和补全输出，不访问 iCloud 数据或本机协调锁；发布单元测试另用隔离的协调目录验证 init/add/list/recover 往返。
+同一版本/内容重跑不重复创建 Release 或提交，旧版本不得覆盖更高版本。现有同名资产必须与待发布内容一致，不会被覆盖；不一致时停止并人工排查，不能删除或移动旧标签绕过检查。发布中断后优先在原工作流中重跑失败的 job，复用同一批已验收产物；临时 artifact 保留 30 天，过期或完整重跑时应人工核对资产，不保证重新构建始终逐字节一致。若上传中断留下非 `uploaded` 状态的同名资产，也须人工检查处理，脚本不会自动删除。Release 已创建而 tap 推送失败时保留 Release；修复权限、网络或远端竞争后重跑并核实资产一致。CI 还运行 `go vet`、`go test` 和 `go test -race`。本地测试要求所有含语句的包保持 100% 语句覆盖，门禁为 `./scripts/coverage-check.sh <coverprofile>`：它按函数逐项要求 100.0%，并按整数统计要求零条未覆盖语句。覆盖错误分支的注入点默认调用真实实现。Formula 测试检查版本和补全输出，不访问 iCloud 数据或本机协调锁；发布单元测试另用隔离的协调目录验证 init/add/list/recover 往返。
 
 ## 使用
 

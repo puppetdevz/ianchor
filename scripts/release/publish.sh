@@ -5,12 +5,13 @@
 #   TAG           tag that triggered the release (required, vMAJOR.MINOR.PATCH)
 #   SOURCE_TOKEN  token with read access to the source repository (required)
 #   TAP_TOKEN     token that can write to the tap main branch (required)
+#   ASSET_DIR     directory containing the two prebuilt release archives (required)
 #   IANCHOR_REPO  owner/name of the source repository
 #   IANCHOR_TAP_URL  git URL of the tap repository
 set -euo pipefail
 set +x
 
-: "${TAG:?Missing tag}" "${SOURCE_TOKEN:?Missing source token}" "${TAP_TOKEN:?Missing HOMEBREW_TAP_TOKEN}"
+: "${TAG:?Missing tag}" "${SOURCE_TOKEN:?Missing source token}" "${TAP_TOKEN:?Missing HOMEBREW_TAP_TOKEN}" "${ASSET_DIR:?Missing asset directory}"
 
 REPO="${IANCHOR_REPO:-puppetdevz/ianchor}"
 if [[ "$REPO" != "puppetdevz/ianchor" ]]; then
@@ -63,8 +64,6 @@ check_source_tag
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 TAP_PATH="$WORK/tap"
-TARBALL_PATH="$WORK/source.tar.gz"
-TARBALL_URL="https://github.com/${REPO}/archive/${HEAD_COMMIT}.tar.gz"
 CANDIDATE="$WORK/ianchor.rb"
 
 # No credential in remote URL, command log or Git config. The helper contains no secret.
@@ -96,14 +95,31 @@ HISTORICAL=false
 [ "$EXISTING_STATUS" -ne 3 ] || HISTORICAL=true
 if [ -f "$TAP_PATH/Formula/ianchor.rb" ]; then ruby -c "$TAP_PATH/Formula/ianchor.rb" >/dev/null; fi
 
-curl --fail --location --retry 3 --output "$TARBALL_PATH" "$TARBALL_URL"
-SHA256=$(shasum -a 256 "$TARBALL_PATH" | awk '{print $1}')
-echo "Source archive sha256: $SHA256"
-ruby "$ROOT/scripts/release/render.rb" "$TEMPLATE" "$CANDIDATE" "$VERSION" "$TARBALL_URL" "$SHA256" "$PARSER"
-ruby -c "$CANDIDATE" >/dev/null
-if [ "$HISTORICAL" = false ]; then
-  ruby "$ROOT/scripts/release/check-existing.rb" "$TAP_PATH/Formula/ianchor.rb" "$VERSION" "$PARSER" "$TARBALL_URL" "$SHA256"
+# Snapshot the supplied artifacts; never build or modify them. Validate the bytes
+# that will actually be uploaded, not just the original paths.
+for arch in arm64 amd64; do
+  name="ianchor_${VERSION}_darwin_${arch}.tar.gz"
+  source_asset="$ASSET_DIR/$name"
+  if [ -L "$source_asset" ] || [ ! -f "$source_asset" ]; then
+    echo "::error::Missing or invalid asset: $name" >&2
+    exit 1
+  fi
+  cp "$source_asset" "$WORK/$name"
+  ruby "$ROOT/scripts/release/validate-asset.rb" "$WORK/$name" "$arch"
+done
+ARM_SHA=$(shasum -a 256 "$WORK/ianchor_${VERSION}_darwin_arm64.tar.gz" | awk '{print $1}')
+AMD_SHA=$(shasum -a 256 "$WORK/ianchor_${VERSION}_darwin_amd64.tar.gz" | awk '{print $1}')
+# Refuse an incompatible existing Formula before making release changes.
+set +e
+ruby "$ROOT/scripts/release/check-existing.rb" "$TAP_PATH/Formula/ianchor.rb" "$VERSION" "$PARSER" "$ARM_SHA" "$AMD_SHA"
+HASH_STATUS=$?
+set -e
+if [ "$HASH_STATUS" -ne 0 ] && { [ "$HISTORICAL" = false ] || [ "$HASH_STATUS" -ne 3 ]; }; then
+  echo "::error::Existing Formula identity was rejected" >&2
+  exit 1
 fi
+ruby "$ROOT/scripts/release/render.rb" "$TEMPLATE" "$CANDIDATE" "$VERSION" "$ARM_SHA" "$AMD_SHA" "$PARSER"
+ruby -c "$CANDIDATE" >/dev/null
 check_source_tag
 
 # An API failure is not evidence of absence. First prove repository access.
@@ -127,6 +143,56 @@ else
   ruby "$ROOT/scripts/release/classify.rb" "$WORK/query-error" "$QUERY_STATUS" "${HTTP_STATUS:-unknown}"
   exit 1
 fi
+
+# Re-query even after creation; use the release id and every page of assets.
+GH_TOKEN="$SOURCE_TOKEN" gh api --include "repos/$REPO/releases/tags/$TAG" > "$WORK/response"
+ruby "$ROOT/scripts/release/check-release.rb" "$WORK/response" "$TAG"
+RELEASE_ID=$(ruby "$ROOT/scripts/release/assets.rb" release-id "$WORK/response")
+list_assets() {
+  GH_TOKEN="$SOURCE_TOKEN" gh api --paginate --slurp "repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" > "$WORK/assets.json"
+}
+asset_state() {
+  ruby "$ROOT/scripts/release/assets.rb" state "$WORK/assets.json" "$1"
+}
+verify_public_asset() {
+  local name="$1" expected="$2" actual
+  # Deliberately unauthenticated: the Formula must work for the public.
+  curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 --output "$WORK/public.tar.gz" "https://github.com/${REPO}/releases/download/${TAG}/${name}"
+  actual=$(shasum -a 256 "$WORK/public.tar.gz" | awk '{print $1}')
+  if [ "$actual" != "$expected" ]; then
+    echo "::error::Public release asset differs: $name" >&2
+    return 1
+  fi
+}
+
+# Check all existing names before uploading anything; never overwrite one.
+list_assets
+for arch in arm64 amd64; do
+  name="ianchor_${VERSION}_darwin_${arch}.tar.gz"
+  if [ "$arch" = arm64 ]; then expected="$ARM_SHA"; else expected="$AMD_SHA"; fi
+  state=$(asset_state "$name")
+  if [ "$state" = present ]; then verify_public_asset "$name" "$expected"; fi
+done
+for arch in arm64 amd64; do
+  name="ianchor_${VERSION}_darwin_${arch}.tar.gz"
+  if [ "$arch" = arm64 ]; then expected="$ARM_SHA"; else expected="$AMD_SHA"; fi
+  list_assets
+  state=$(asset_state "$name")
+  if [ "$state" = missing ]; then
+    # A competing uploader or a lost response can make upload fail after success.
+    # Re-query and accept only an existing asset whose public bytes match.
+    if ! GH_TOKEN="$SOURCE_TOKEN" gh release upload "$TAG" "$WORK/$name" --repo "$REPO"; then
+      echo "Upload failed for $name; checking release state before deciding." >&2
+    fi
+    list_assets
+    state=$(asset_state "$name")
+    if [ "$state" != present ]; then
+      echo "::error::Release asset is still missing: $name" >&2
+      exit 1
+    fi
+  fi
+  verify_public_asset "$name" "$expected"
+done
 
 check_source_tag
 if [ "$HISTORICAL" = true ]; then

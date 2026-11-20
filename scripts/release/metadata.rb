@@ -19,7 +19,9 @@ end
 body = klass[3]
 abort 'Unsupported Formula class body' unless body[0] == :bodystmt && body.drop(2).all?(&:nil?)
 fields = %w[version url sha256 depends_on]
+metadata_methods = fields + %w[on_arm on_intel]
 declarations = Hash.new { |hash, key| hash[key] = [] }
+branches = {}
 literal_nodes = %i[args_add_block string_literal string_content symbol_literal symbol array hash assoclist_from_args bare_assoc_hash assoc_new
                    string_concat]
 literal = lambda do |node|
@@ -33,7 +35,7 @@ end
 scan_deferred = lambda do |node|
   next unless node.is_a?(Array)
 
-  if node[0] == :@ident && fields.include?(node[1])
+  if node[0] == :@ident && metadata_methods.include?(node[1])
     abort 'Metadata must be an unconditional direct Formula class declaration'
   end
   node.each { |child| scan_deferred.call(child) if child.is_a?(Array) }
@@ -55,18 +57,46 @@ body[1].each do |node|
       abort 'Unsupported Formula class-level call'
     end
   when :def
-    abort 'Cannot override Formula metadata methods' if fields.include?(node[1][1])
+    abort 'Cannot override Formula metadata methods' if metadata_methods.include?(node[1][1])
 
     scan_deferred.call(node)
   when :method_add_block
-    call = node[1]
-    unless call[0] == :method_add_arg && call[1][0] == :fcall &&
-           call[1][1][1] == 'test' && call[2] == []
+    call, block = node[1], node[2]
+    unless call[0] == :method_add_arg && call[1][0] == :fcall && call[2] == []
       abort 'Unsupported Formula class-level block'
     end
-    # Homebrew registers this block; it does not run while reading metadata.
+    name = call[1][1][1]
+    if %w[on_arm on_intel].include?(name)
+      abort 'Duplicate architecture block' if branches.key?(name)
+      unless block[0] == :do_block && block[1].nil? && block[2][0] == :bodystmt && block[2].drop(2).all?(&:nil?)
+        abort 'Unsupported architecture block'
+      end
+      entries = Hash.new { |hash, key| hash[key] = [] }
+      block[2][1].each do |entry|
+        next if entry[0] == :void_stmt
+        unless entry[0] == :command && %w[url sha256].include?(entry[1][1]) &&
+               entry[2][0] == :args_add_block && entry[2][2] == false && literal.call(entry[2])
+          abort 'Unsupported architecture metadata'
+        end
+        entries[entry[1][1]] << entry[1][2]
+      end
+      branches[name] = entries
+    elsif name == 'test'
+      # The test is deferred; reject declarations there without rejecting version.to_s.
+      check_test = lambda do |part|
+        next unless part.is_a?(Array)
+        if %i[command fcall].include?(part[0]) && part[1].is_a?(Array) && metadata_methods.include?(part[1][1])
+          abort 'Metadata must not be declared in the test block'
+        end
+        part.each { |child| check_test.call(child) if child.is_a?(Array) }
+      end
+      check_test.call(block)
+    else
+      abort 'Unsupported Formula class-level block'
+    end
   else
     abort 'Unsupported conditional or indirect Formula declaration'
   end
 end
+declarations['branches'] = branches
 puts JSON.generate(declarations)
